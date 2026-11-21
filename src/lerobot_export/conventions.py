@@ -18,12 +18,13 @@ SPACES = {len(JOINTS): "joint", len(EE_NAMES): "ee"}  # observation.state's size
 JOINT_STATES = "/joint_states"
 CONTROLLER = "joint_trajectory_controller"  # recorded through, and commanded through at run time
 CONTROLLER_STATE = f"/{CONTROLLER}/controller_state"
-# Camera name -> (colour topic, depth topic): the Gemini 305 on the wrist (its two colour cameras) and the scene camera.
-# The dataset's key of a camera is observation.images.<name>.
+# Camera name -> (colour topic, depth topic): the overhead USB camera and the camera between the two arms, both run
+# by //src/camera_drivers:camera with --namespace /scene_camera and /center_camera (the recorder stores their
+# image_raw as image_raw/compressed). The depth topics are only read with bag_to_lerobot --depth; these cameras
+# publish none. The dataset's key of a camera is observation.images.<name>.
 CAMERAS = {
     "scene": ("/scene_camera/image_raw/compressed", "/scene_camera/depth/image_raw/compressedDepth"),
-    "wrist_left": ("/camera/left_color/image_raw/compressed", "/camera/left_color/depth/image_raw/compressedDepth"),
-    "wrist_right": ("/camera/right_color/image_raw/compressed", "/camera/right_color/depth/image_raw/compressedDepth"),
+    "center": ("/center_camera/image_raw/compressed", "/center_camera/depth/image_raw/compressedDepth"),
 }
 IMAGE_KEY_PREFIX = "observation.images."
 # The datasets' images (H, W): the cameras' 720 x 1280 halved. ACT at 720p (3 cameras, 2760 image tokens) does not
