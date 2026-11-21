@@ -1,0 +1,125 @@
+# Bazel configuration for building against the ROS Central Registry (RCR).
+# Adapted from https://github.com/openrobotics/ros-central-registry/tree/main/examples
+
+# Resolve modules from this repo's registry (Orbbec camera packages, not in the RCR; see
+# third_party/registry/README.md), then the RCR, then the BCR.
+common --registry=file://%workspace%/third_party/registry
+common --registry=https://bazel.ros.org
+common --registry=https://bcr.bazel.build
+
+# RCR modules are pinned by the ROS release; don't nag about direct dep versions.
+common --check_direct_dependencies=off
+
+# ---- Remote cache -----------------------------------------------------------
+# Switch with `tools/cache use <intrinsic|lan|none>`; see `tools/cache help`.
+# That writes the gitignored .bazelrc.cache imported below. With no such file
+# the default is the RCR's public, read-only cache (the first build otherwise
+# compiles everything, including LLVM and Qt, from source).
+#
+#   intrinsic: RCR public cache, read-only.
+#   lan:       a bazel-remote server on your network (see `tools/cache serve`),
+#              which proxies the RCR cache and stores what you build.
+#   none:      no remote cache; build everything locally.
+common:cache-intrinsic --remote_cache=https://storage.googleapis.com/intrinsic-opensource-buildcache
+common:cache-intrinsic --remote_upload_local_results=false
+common:cache-lan --remote_upload_local_results=true
+common:cache-none --remote_cache=
+
+common --remote_cache_compression=true
+build --remote_download_outputs=toplevel
+
+common --config=cache-intrinsic
+try-import %workspace%/.bazelrc.cache
+
+common --enable_platform_specific_config
+common --incompatible_default_to_explicit_init_py
+common --incompatible_strict_action_env
+common --nobuild_runfile_links
+common --noexperimental_collect_system_network_usage
+
+# Runtime environment for `bazel run` / `bazel test`.
+common --run_env=ROS_DISTRO=lyrical
+common --run_env=ROS_HOME=.ros
+common --run_env=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+common --run_env=LD_LIBRARY_PATH=lib
+common --run_env=TMPDIR=/tmp
+common --test_env=ROS_DISTRO=lyrical
+common --test_env=ROS_HOME=.ros
+common --test_env=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+common --test_env=LD_LIBRARY_PATH=lib
+common --test_env=TMPDIR=/tmp
+common --test_env=QT_QPA_PLATFORM=offscreen
+common --test_env=QT_FORCE_STDERR_LOGGING=1
+common:linux --run_env=QT_QPA_PLATFORM=xcb
+
+# Fast DDS: default transports (shared memory + UDPv4), but no datagram over 1400
+# bytes. Larger samples (a FollowJointTrajectory goal is ~2 KB) are then split by
+# Fast DDS instead of by IP fragmentation, which is unreliable between the dev PC
+# and the remote build host: without this, ~50% of goals to the remote sim were
+# lost or delayed 2-3 s; with it, none (//src/ros2_control_sim:latency_diagnostic).
+# Inherited by the ROS nodes the launchers start, here and on the remote host.
+common --run_env=FASTDDS_BUILTIN_TRANSPORTS=DEFAULT?max_msg_size=1400B
+common --test_env=FASTDDS_BUILTIN_TRANSPORTS=DEFAULT?max_msg_size=1400B
+
+# --config=noshm: UDPv4 only, no shared memory (same 1400 byte limit). For when Fast DDS's shared memory
+# transport misbehaves, e.g. crashes with `CacheChangePool::return_cache_to_pool ... free_caches_` assertions, which
+# stale segments from killed ROS processes in /dev/shm (fastdds_port*) can cause. Slower between processes on
+# one machine (loopback instead of shared memory). Every ROS process of a run needs it, RViz included.
+common:noshm --run_env=FASTDDS_BUILTIN_TRANSPORTS=UDPv4?max_msg_size=1400B
+common:noshm --test_env=FASTDDS_BUILTIN_TRANSPORTS=UDPv4?max_msg_size=1400B
+
+# FFmpeg components are bazel flags that all default to off. usb_cam constructs
+# its MJPEG decoder and parser at startup for every pixel format and aborts
+# without them ("Could not find MJPEG decoder" / "... parser").
+common --@ffmpeg//:enable_mjpeg_decoder=True
+common --@ffmpeg//:enable_mjpeg_parser=True
+
+common --per_file_copt=external/qt[^/]*[+]/.*@-Wno-thread-safety-analysis
+common --host_per_file_copt=external/qt[^/]*[+]/.*@-Wno-thread-safety-analysis
+
+# Hermetic LLVM toolchain; never pick up the system compiler.
+build --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build --repo_env=PIP_CONFIG_FILE=/dev/null
+build --@llvm//config:fastbuild_optimization_mode=O1
+build --@llvm//config:experimental_stub_libgcc_s=True
+build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
+build --define=TMPDIR=/tmp
+build --cxxopt=-std=c++23
+build --host_cxxopt=-std=c++23
+build --per_file_copt=external/.*fastdds.*@-std=c++17
+build --host_per_file_copt=external/.*fastdds.*@-std=c++17
+
+build:linux --platforms=//platforms:linux
+build:linux --extra_execution_platforms=//platforms:linux
+
+common --action_env=LC_CTYPE=C.UTF-8
+common --host_action_env=LC_CTYPE=C.UTF-8
+common:linux --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:linux --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
+
+# Tests run hermetically with an isolated ROS domain.
+test --sandbox_default_allow_network=true
+test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+test --run_under=@rosdistro//python:run_test_isolated
+test --test_output=errors
+
+# Per-user overrides (e.g. --disk_cache) go in user.bazelrc, which is gitignored.
+try-import %workspace%/user.bazelrc
+
+# Full class layouts in debug info for this repo's own sources only. Bazel
+# matches per_file_copt against both the label and the exec path, so anchor on
+# main-repo labels (//...); external labels look like @@repo+//... and must not
+# match, or every dependency loses its cache hits.
+build:debug --per_file_copt=^//.*@-fstandalone-debug
+# ---- Android (//src/teleop/quest_app/app) --------------------------------------------
+# android_binary builds its native code for these platforms (transition); nothing else changes.
+common --android_platforms=@rules_android//:arm64-v8a
+# rules_android's Java tools, on the hermetic JDK 17 from rules_java.
+common --java_language_version=17
+common --java_runtime_version=remotejdk_17
+common --tool_java_language_version=17
+common --tool_java_runtime_version=remotejdk_17
+# Android SDK License Agreement (https://developer.android.com/studio/terms), accepted for
+# these versions; hermetic_android_toolchains won't download without it.
+common --repo_env=ACCEPTED_ANDROID_SDK_LICENSE_VERSION=34
+common --repo_env=ACCEPTED_ANDROID_NDK_LICENSE_VERSION=r27c

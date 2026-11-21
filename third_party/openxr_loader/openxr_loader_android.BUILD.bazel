@@ -1,0 +1,24 @@
+# Khronos OpenXR loader for Android (org.khronos.openxr:openxr_loader_for_android AAR).
+# Gradle reads the AAR's "prefab" package; Bazel doesn't, so the arm64 .so and the headers
+# are imported directly. The loader needs no C++ STL ("stl": "none" in its abi.json).
+
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_import(
+    name = "openxr_loader_so",
+    shared_library = "prefab/modules/openxr_loader/libs/android.arm64-v8a/libopenxr_loader.so",
+    target_compatible_with = [
+        "@platforms//os:android",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+cc_library(
+    name = "openxr_loader",
+    hdrs = glob(["prefab/modules/headers/include/openxr/*.h"]),
+    strip_include_prefix = "prefab/modules/headers/include",
+    deps = [":openxr_loader_so"],
+)
+

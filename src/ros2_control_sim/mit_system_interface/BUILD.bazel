@@ -1,0 +1,68 @@
+# MitMujocoSystemInterface: mujoco_ros2_control's system with the reBot Arm RS's MIT-mode joint
+# interfaces (position, velocity, kp, kd, t_ff), so a controller written against the sim also runs on the
+# real arm (@rebot_arm_rs_ros2//:rebot_robstride_protocol). It also publishes the whole MuJoCo state
+# (/mujoco_state) and serves /set_mujoco_state (//src/mujoco_state_msgs). See mit_system_interface.hpp.
+# A cc_shared_library plugin like //src/controllers/joint_impedance_controller; add :ament_index to the
+# data of the process that loads it (//src/ros2_control_sim:ros2_control_node).
+
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@control_toolbox//:control_toolbox": "@control_toolbox//:control_toolbox_library",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@mujoco_ros2_control//:mujoco_ros2_control": "@mujoco_ros2_control//:mujoco_ros2_control_library",
+    "@mujoco_ros2_control_msgs//:cc_shared": "@mujoco_ros2_control_msgs//:cc",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:glfw": "@rosdistro//cc:glfw_library",
+    "@rosdistro//cc:mujoco": "@rosdistro//cc:mujoco_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosgraph_msgs//:cc_shared": "@rosgraph_msgs//:cc",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@transmission_interface//:transmission_interface": "@transmission_interface//:transmission_interface_library",
+    "//src/mujoco_state_msgs:cc_shared": "//src/mujoco_state_msgs:cc",
+}
+
+cc_library(
+    name = "mit_system_interface_library",
+    srcs = ["mit_system_interface.cpp"],
+    hdrs = ["mit_system_interface.hpp"],
+    copts = [
+        "-Wno-deprecated-declarations",  # the Handle pointer constructors, as in mujoco_ros2_control
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + ["@rosdistro//cc:fmt"],
+)
+
+cc_shared_library(
+    name = "mit_system_interface",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//src/ros2_control_sim/mit_system_interface:__subpackages__"],
+    deps = [":mit_system_interface_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    export_name = "mit_system_interface",
+    libraries = [":mit_system_interface"],
+    package_xml = "package.xml",
+    plugin_category = "hardware_interface",
+    plugins = ["mit_system_interface_plugin.xml"],
+    deps = [
+        "@hardware_interface//:ament_package",
+        "@mujoco_ros2_control//:ament_index",
+        "//src/mujoco_state_msgs:ament_package",
+        "@pluginlib//:ament_package",
+    ],
+)

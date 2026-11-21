@@ -1,0 +1,63 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# Environment shared by the reBot Arm scenes: the floor the arm stands on (z = 0), lights, and
+# an "overview" camera. Sublayered with the robot's USD files (scene.usda of each model).
+# Not part of the MJCF models, so it has no counterpart there.
+
+def Xform "World"
+{
+    def Cube "floor"
+    {
+        double size = 1
+        double3 xformOp:translate = (0, 0, -0.005)
+        float3 xformOp:scale = (4, 4, 0.01)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        color3f[] primvars:displayColor = [(0.15, 0.25, 0.35)]
+    }
+
+    def DistantLight "sun"
+    {
+        float inputs:intensity = 3000
+        float inputs:angle = 1
+        matrix4d xformOp:transform = ( (0.8, 0.3, -0.5, 0), (-0.5, 0.8, -0.3, 0), (0.3, 0.5, 0.8, 0), (0, 0, 0, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+
+    def DomeLight "sky"
+    {
+        float inputs:intensity = 500
+    }
+
+    def Camera "overview"
+    {
+        matrix4d xformOp:transform = ( (0.752577, 0.658505, -0, 0), (-0.231912, 0.265043, 0.935932, 0), (0.616316, -0.704361, 0.35218, 0), (0.8, -0.8, 0.6, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        float focalLength = 18.8
+        float verticalAperture = 24
+        float horizontalAperture = 32
+        float2 clippingRange = (0.01, 100)
+    }
+}
+
+def Scope "Render"
+{
+    def RenderProduct "overview"
+    {
+        rel camera = </World/overview>
+        uniform int2 resolution = (640, 480)
+        rel orderedVars = </Render/Vars/LdrColor>
+    }
+
+    def Scope "Vars"
+    {
+        def RenderVar "LdrColor"
+        {
+            uniform string sourceName = "LdrColor"
+        }
+    }
+}

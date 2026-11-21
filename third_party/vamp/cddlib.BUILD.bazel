@@ -1,0 +1,30 @@
+# @cddlib: double description method (polytope conversion), used by VAMP.
+# Floating-point only (no GMP), as in VAMP's CMake build.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# License: GPL-2.0-or-later
+
+cc_library(
+    name = "cddlib",
+    srcs = [
+        "lib-src/cddcore.c",
+        "lib-src/cddio.c",
+        "lib-src/cddlib.c",
+        "lib-src/cddlp.c",
+        "lib-src/cddmp.c",
+        "lib-src/cddproj.c",
+        "lib-src/setoper.c",
+    ],
+    hdrs = [
+        "lib-src/cdd.h",
+        "lib-src/cddmp.h",
+        "lib-src/cddtypes.h",
+        "lib-src/setoper.h",
+        "lib-src/splitmix64.h",
+    ],
+    copts = ["-w"],
+    includes = ["lib-src"],
+)

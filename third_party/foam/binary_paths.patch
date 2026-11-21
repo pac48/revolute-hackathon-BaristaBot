@@ -1,0 +1,45 @@
+Let foam find its tools by path (FOAM_BINARY_<name>) instead of only next to
+its Python package, so the Bazel-built binaries can be used.
+
+--- a/foam/external/__init__.py
++++ b/foam/external/__init__.py
+@@ -1,5 +1,6 @@
+ from sys import stdout
+ from pathlib import Path
++from os import environ
+ from os import remove as remove_file
+ from subprocess import run, DEVNULL
+ 
+@@ -10,15 +11,23 @@
+ from foam.utility import *
+ 
+ EXTERNAL_BINARY_DIR = Path(__file__).parent
+-MAKE_TREE_MEDIAL_PATH = EXTERNAL_BINARY_DIR / "makeTreeMedial"
+-MAKE_TREE_GRID_PATH = EXTERNAL_BINARY_DIR / "makeTreeGrid"
+-MAKE_TREE_HUBBARD_PATH = EXTERNAL_BINARY_DIR / "makeTreeHubbard"
+-MAKE_TREE_OCTREE_PATH = EXTERNAL_BINARY_DIR / "makeTreeOctree"
+-MAKE_TREE_SPAWN_PATH = EXTERNAL_BINARY_DIR / "makeTreeSpawn"
+-MANIFOLD_PATH = EXTERNAL_BINARY_DIR / "manifold"
+-SIMPLIFY_PATH = EXTERNAL_BINARY_DIR / "simplify"
+-MANIFOLD_OLD_PATH = EXTERNAL_BINARY_DIR / "manifold_old"
+-SIMPLIFY_OLD_PATH = EXTERNAL_BINARY_DIR / "simplify_old"
++
++
++def _binary(name: str) -> Path:
++    # Built tools can be passed by path (FOAM_BINARY_<name>, set by the Bazel
++    # wrapper); otherwise they are expected next to this file.
++    return Path(environ.get(f"FOAM_BINARY_{name}", EXTERNAL_BINARY_DIR / name))
++
++
++MAKE_TREE_MEDIAL_PATH = _binary("makeTreeMedial")
++MAKE_TREE_GRID_PATH = _binary("makeTreeGrid")
++MAKE_TREE_HUBBARD_PATH = _binary("makeTreeHubbard")
++MAKE_TREE_OCTREE_PATH = _binary("makeTreeOctree")
++MAKE_TREE_SPAWN_PATH = _binary("makeTreeSpawn")
++MANIFOLD_PATH = _binary("manifold")
++SIMPLIFY_PATH = _binary("simplify")
++MANIFOLD_OLD_PATH = _binary("manifold_old")
++SIMPLIFY_OLD_PATH = _binary("simplify_old")
+ 
+ 
+ def read_spherization_file(filename: Path, offset: NDArray) -> list[Spherization]:

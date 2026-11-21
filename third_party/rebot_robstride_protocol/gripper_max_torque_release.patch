@@ -1,0 +1,67 @@
+diff -ruN b4/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp b5/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp
+--- b4/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-17 00:45:46.215144691 -0500
++++ b5/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-17 00:53:38.119213743 -0500
+@@ -79,6 +79,7 @@
+     double max_error{std::numeric_limits<double>::infinity()};
+     std::chrono::steady_clock::time_point pushing_since{};  // the target has been ahead of a stalled motor since
+     bool limited{false};                                    // pushing for long enough: the command is held at max_error
++    double limited_direction{0.0};                          // the sign of the error it was held in
+     double target_position{std::numeric_limits<double>::quiet_NaN()};
+     double sent_position{std::numeric_limits<double>::quiet_NaN()};
+     double velocity_limit{0.25};
+diff -ruN b4/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp b5/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp
+--- b4/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-17 00:45:46.215144691 -0500
++++ b5/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-17 00:53:38.119213743 -0500
+@@ -273,11 +273,20 @@
+       {
+         const double error = motor_target - position;
+         const double toward = std::copysign(1.0, error) * velocity;
++        if (device.limited && std::copysign(1.0, error) != device.limited_direction) {
++          // The target is now on the other side (opening after a squeeze): release at once and give that motion
++          // its full torque for the grace period again, to break away from the object.
++          device.limited = false;
++          device.pushing_since = {};
++        }
+         if (std::abs(error) > device.max_error && toward < kStallVelocity) {
+           if (device.pushing_since == std::chrono::steady_clock::time_point{}) {
+             device.pushing_since = now;
+           }
+-          device.limited = device.limited || now - device.pushing_since >= kStallTime;
++          if (!device.limited && now - device.pushing_since >= kStallTime) {
++            device.limited = true;
++            device.limited_direction = std::copysign(1.0, error);
++          }
+         } else {
+           device.pushing_since = {};
+           device.limited = false;
+diff -ruN b4/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp b5/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp
+--- b4/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-17 00:46:05.290798444 -0500
++++ b5/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-17 00:53:38.119213743 -0500
+@@ -257,6 +257,27 @@
+   EXPECT_NEAR(command_velocity(commands.front()), 0.0, 0.1);
+ }
+ 
++TEST(RebotGripperProtocol, MaxTorqueReleasesAtOnceWhenTheTargetReverses)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {limited_gripper_configuration()});
++  ASSERT_TRUE(protocol.process_frame(status(2.5F, 0.0F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.1));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));
++  std::vector<shared_can_interface::v1::CanFrame> commands;
++  for (int i = 0; i < 20; ++i) {  // squeezed: held 0.01 rad ahead
++    protocol.command_frames(commands);
++    std::this_thread::sleep_for(std::chrono::milliseconds(15));
++    ASSERT_TRUE(protocol.process_frame(status(2.5F, 0.0F), std::chrono::steady_clock::now()));
++  }
++  // Open: the command goes ahead of the (still blocked) motor by the slew, with the full torque of the law to
++  // break away, not another 0.01 rad (a squeeze limit under the gripper's friction would never let it move).
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.05));
++  std::this_thread::sleep_for(std::chrono::milliseconds(15));
++  protocol.command_frames(commands);
++  EXPECT_GT(command_position(commands.front()), 2.5 + 0.05);
++}
++
+ TEST(RebotGripperProtocol, MaxTorqueDoesNotLimitFreeMotion)
+ {
+   rebot_robstride_protocol::RebotGripperProtocol protocol;

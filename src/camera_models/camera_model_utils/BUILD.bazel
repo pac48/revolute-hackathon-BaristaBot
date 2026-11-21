@@ -1,0 +1,37 @@
+# Shared by the camera models: a model's URDF on a ROS topic plus its static TF
+# (camera_description), and its cameras' optics from the MJCF (mjcf_cameras).
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# A camera's URDF on <ns>/robot_description plus the static TF its driver doesn't publish.
+py_library(
+    name = "camera_description",
+    srcs = ["camera_description.py"],
+    deps = [
+        "@geometry_msgs//:py",
+        "@rclpy",
+        "@std_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_library(
+    name = "mjcf_cameras",
+    srcs = ["mjcf_cameras.py"],
+)
+
+py_test(
+    name = "camera_description_test",
+    size = "small",
+    srcs = ["camera_description_test.py"],
+    deps = [":camera_description"],
+)
+
+py_test(
+    name = "mjcf_cameras_test",
+    size = "small",
+    srcs = ["mjcf_cameras_test.py"],
+    deps = [":mjcf_cameras"],
+)

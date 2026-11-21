@@ -1,0 +1,8 @@
+<library path="joint_impedance_controller">
+  <class name="joint_impedance_controller/JointImpedanceController" type="joint_impedance_controller::JointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Feedforward impedance control of joint trajectories: effort = M(q_d) qdd_d + C(q_d, qd_d) qd_d + g(q_d)
+      + Kp (q_d - q) + Kd (qd_d - qd), with q_d from a smoothed, preemptable buffer of the trajectories' points (trajectory_buffer).
+    </description>
+  </class>
+</library>

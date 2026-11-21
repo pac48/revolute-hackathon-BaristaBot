@@ -1,0 +1,38 @@
+# usb_camera model data: a generic USB camera as MJCF (optics and frames), with no ROS
+# and no code. Functionality built on these files is in ../usb_camera.
+# Each file is a py_data_library:
+#   from src.camera_models.usb_camera_data import mjcf, urdf; urdf.path()
+
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["usb_camera.xml"])
+
+# MuJoCo MJCF: bodies and cameras. The single source of truth for the model.
+py_data_library(
+    name = "mjcf",
+    src = "usb_camera.xml",
+)
+
+# URDF generated from the MJCF: the links (frames).
+genrule(
+    name = "urdf_gen",
+    srcs = ["usb_camera.xml"],
+    outs = ["usb_camera.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) $< $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "urdf",
+    src = "usb_camera.urdf",
+)
+
+filegroup(
+    name = "model",
+    srcs = [
+        "usb_camera.urdf",
+        "usb_camera.xml",
+    ],
+)

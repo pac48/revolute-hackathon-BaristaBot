@@ -1,0 +1,207 @@
+# reBot Arm B601 model data: URDF, MJCF and meshes from Seeed-Projects/reBot-DevArm,
+# fetched as @rebot_arm_description (http_archive in MODULE.bazel), not checked in.
+# Two variants: RS (MJCF has torque actuators, no wrist cameras, plus a grasp scene) and
+# DM (visual MJCF without actuators). Each target is a py_data_library whose
+# runfiles include the meshes it loads by relative path:
+#   from src.robot_model.rebot_arm_data import rs_mjcf; rs_mjcf.path()
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+load("//src/robot_model/robot_model_utils:symlink_tree.bzl", "symlink_tree")
+load("//src/robot_model/robot_model_utils/spherize:spherize.bzl", "sphere_editor", "spherized_robot", "spheres_model")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "rebot_arm_description.BUILD.bazel",
+    # Shared by the models composed on the arm (rebot_arm_gemini_305_data).
+    "rs_spheres.yaml",
+    "mjcf/rs_arm.xml",
+])
+
+[
+    py_data_library(
+        name = name,
+        src = "@rebot_arm_description//:" + name,
+    )
+    for name in [
+        "dm_mjcf",
+        "dm_urdf",
+        "rs_urdf",
+    ]
+]
+
+# The RS MJCFs are vendored in mjcf/ (edit rs_arm.xml directly; derived from the upstream
+# reBot-DevArm RS/mjcf/rs_arm.xml, minus the wrist cameras, with adjacent-body contacts excluded).
+# They load meshes by a path relative to the file (meshdir "meshes"), so the files and the upstream
+# meshes are linked into one tree, rs/.
+symlink_tree(
+    name = "rs_tree",
+    srcs = [
+        "mjcf/rs_arm.xml",
+        "mjcf/rs_grasp_scene.xml",
+        "mjcf/wrist_camera.xml",
+        "@rebot_arm_description//:rs_meshes",
+    ],
+    layout = {
+        "/rebot_arm_data/mjcf/": "rs/",
+        "/RS/meshes/": "rs/meshes/",
+    },
+)
+
+# Arm with torque (<motor>) actuators, driven by position PIDs (see ../rebot_arm).
+filegroup(
+    name = "rs_arm_mjcf",
+    srcs = [":rs_tree"],
+    output_group = "rs/rs_arm.xml",
+    data = [":rs_tree"],
+)
+
+# Grasp scene; includes rs_arm.xml.
+filegroup(
+    name = "rs_grasp_scene_mjcf",
+    srcs = [":rs_tree"],
+    output_group = "rs/rs_grasp_scene.xml",
+    data = [":rs_tree"],
+)
+
+py_data_library(
+    name = "rs_mjcf",
+    src = ":rs_arm_mjcf",
+)
+
+py_data_library(
+    name = "rs_scene_mjcf",
+    src = ":rs_grasp_scene_mjcf",
+)
+
+# Simplified USD stand-ins for rendering (renderer.hpp): the arm's bodies (usd/rebot_arm.usda, an
+# Xform per MJCF body, named after it), the environment shared by the scenes (floor, lights, the
+# "overview" camera) and the arm's scene (usd/scene.usda: the two layered). The boxes are to be
+# replaced by the real assets; the prim names must keep matching the MJCF (rs_usd_test).
+filegroup(
+    name = "rebot_arm_usd",
+    srcs = [
+        "usd/rebot_arm.usda",
+    ],
+)
+
+filegroup(
+    name = "environment_usd",
+    srcs = ["usd/environment.usda"],
+)
+
+filegroup(
+    name = "scene_usd",
+    srcs = ["usd/scene.usda"],
+    data = [
+        ":environment_usd",
+        ":rebot_arm_usd",
+    ],
+)
+
+# Upstream license texts and third-party notices.
+alias(
+    name = "licenses",
+    actual = "@rebot_arm_description//:licenses",
+)
+
+# Every MJCF compiles in MuJoCo with its meshes resolved from runfiles.
+MJCFS = [
+    "@rebot_arm_description//:dm_mjcf",
+    ":rs_arm_mjcf",
+    ":rs_grasp_scene_mjcf",
+]
+
+cc_test(
+    name = "mjcf_load_test",
+    size = "small",
+    srcs = ["mjcf_load_test.cpp"],
+    args = ["$(rlocationpath %s)" % m for m in MJCFS],
+    data = MJCFS,
+    deps = [
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mujoco_library",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+# No contacts between adjacent (parent-child) bodies of the RS arm over random configurations.
+cc_test(
+    name = "mjcf_contacts_test",
+    size = "small",
+    srcs = ["mjcf_contacts_test.cpp"],
+    args = ["$(rlocationpath :rs_arm_mjcf)"],
+    data = [":rs_arm_mjcf"],
+    deps = [
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mujoco_library",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+# URDF generated from the RS MJCF, so joint names match what mujoco_ros2_control
+# simulates (the upstream URDF names the gripper joints differently).
+genrule(
+    name = "rs_generated_urdf_gen",
+    srcs = [
+        ":rs_tree",
+        ":rs_arm_mjcf",
+    ],
+    outs = ["rs_generated.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) $(execpath :rs_arm_mjcf) $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "rs_generated_urdf",
+    src = "rs_generated.urdf",
+)
+
+# The same URDF plus the MJCF's visual meshes, for the ROS robot_description (RViz). Mesh
+# filenames are package://rebot_arm_description/meshes/..., which RViz resolves through
+# @rebot_arm_description//:ament_index (so it can run on another machine than the simulation).
+# Kinematics and VAMP use rs_generated.urdf (no meshes).
+genrule(
+    name = "rs_visual_urdf_gen",
+    srcs = [
+        ":rs_tree",
+        ":rs_arm_mjcf",
+    ],
+    outs = ["rs_visual.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) --mesh-prefix package://rebot_arm_description/meshes/ " +
+          "$(execpath :rs_arm_mjcf) $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "rs_visual_urdf",
+    src = "rs_visual.urdf",
+)
+
+# Collision model for motion planning (VAMP): rs_spheres.yaml (spheres per link,
+# gripper joints fixed) merged into the generated URDF -> rs_vamp.urdf + .srdf.
+# Re-seed the spec (overwrites hand edits):
+#   bazel run //src/robot_model/robot_model_utils/spherize:seed_spheres -- \
+#     --mjcf src/robot_model/rebot_arm_data/mjcf/rs_arm.xml \
+#     --out src/robot_model/rebot_arm_data/rs_spheres.yaml --fix joint7=0 joint_left=0 joint_right=0
+spherized_robot(
+    name = "rs_vamp",
+    spec = "rs_spheres.yaml",
+    urdf = ":rs_generated.urdf",
+    visibility = ["//visibility:public"],
+)
+
+# Edit the spheres in Blender: bazel run :export_spheres, edit rs_spheres.obj, bazel run :import_spheres.
+sphere_editor(
+    mjcf = ":rs_arm_mjcf",
+    specs = ["rs_spheres.yaml"],
+    urdf = ":rs_generated.urdf",
+)
+
+# The model's MJCF with the spheres as its collision geoms, and its viewer: bazel run :view_spheres
+spheres_model(
+    scene = "rs/rs_arm.xml",
+    specs = ["rs_spheres.yaml"],
+    tree = ":rs_tree",
+)

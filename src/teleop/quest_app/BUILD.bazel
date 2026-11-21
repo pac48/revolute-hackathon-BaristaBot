@@ -1,0 +1,11 @@
+# Quest teleop app: native OpenXR app for Meta Quest, built with the hermetic Android
+# toolchain, plus the headset tools. See README.md.
+#   bazel run //src/teleop/quest_app:launch               # build, install if changed, start (headset needn't be worn)
+#   bazel run //src/teleop/quest_app:launch -- --stop     # stop it, let the headset sleep again
+#   bazel build //src/teleop/quest_app/app:quest_teleop   # just the APK
+#   bazel test //src/teleop/quest_app/...
+
+alias(
+    name = "launch",
+    actual = "//src/teleop/quest_app/tools:launch",
+)

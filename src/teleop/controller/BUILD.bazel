@@ -1,0 +1,62 @@
+# Teleop controller: the clutched VR end-effector tracking node (C++).
+#   :clutch  ROS-free clutched tracking math
+#   :teleop  bazel run //src/teleop/controller:teleop  (Quest app + //src/teleop/quest_bridge; see teleop_main.cpp)
+
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Clutched end-effector tracking math (ROS-free).
+cc_library(
+    name = "clutch",
+    srcs = ["clutch.cpp"],
+    hdrs = ["clutch.hpp"],
+    deps = ["@eigen"],
+)
+
+cc_test(
+    name = "clutch_test",
+    size = "small",
+    srcs = ["clutch_test.cpp"],
+    deps = [
+        ":clutch",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# ROS libraries the teleop node links (static), and their shared-library closure.
+TELEOP_ROS_DEPS = {
+    "@control_msgs//:cc_shared": "@control_msgs//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
+}
+
+collect_transitive_dynamic_deps(
+    name = "teleop_dynamic_deps",
+    dynamic_deps = TELEOP_ROS_DEPS.keys(),
+)
+
+# bazel run //src/teleop/controller:teleop  (Quest app + //src/teleop/quest_bridge; see teleop_main.cpp)
+cc_binary(
+    name = "teleop",
+    srcs = ["teleop_main.cpp"],
+    copts = ["-Wno-deprecated-declarations"],  # rosidl_runtime_cpp's codecvt use
+    dynamic_deps = [":teleop_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = TELEOP_ROS_DEPS.values() + [
+        ":clutch",
+        "//src/robot_model/active_model:active_model_cc",
+        "//src/robot_model/rebot_arm",
+        "//src/robot_model/rebot_arm_gemini_305",
+        "//src/robot_model/rebot_dual_arm_gemini_305",
+        "//src/robot_model/robot_model_utils:kinematics",
+        "//src/robot_model/robot_model_utils:motion_planner",
+        "//src/robot_model/robot_model_utils:mujoco_model",
+        "@cxxopts",
+    ],
+)

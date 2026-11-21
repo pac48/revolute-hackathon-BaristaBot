@@ -1,0 +1,45 @@
+# Platform-independent core of the Quest teleop app: pose math, XR <-> ROS frames, JSON, the
+# WebSocket client and the reconnecting TeleopLink. Built for the headset (//src/teleop/quest_app/app)
+# and for this PC (tests, fake_headset).
+#   bazel test //src/teleop/quest_app/core:core_test
+#   bazel run //src/teleop/quest_app/core:fake_headset -- [ws://host:port] [seconds]
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//src/teleop/quest_app:__subpackages__"])
+
+cc_library(
+    name = "core",
+    srcs = [
+        "json.cpp",
+        "protocol.cpp",
+        "teleop_link.cpp",
+        "websocket_client.cpp",
+    ],
+    hdrs = [
+        "frames.h",
+        "json.h",
+        "pose_math.h",
+        "protocol.h",
+        "teleop_link.h",
+        "websocket_client.h",
+    ],
+    linkopts = select({
+        "@platforms//os:android": [],  # threads are in libc
+        "//conditions:default": ["-lpthread"],
+    }),
+)
+
+cc_test(
+    name = "core_test",
+    size = "small",
+    srcs = ["core_test.cpp"],
+    deps = [":core"],
+)
+
+# Stand-in for the headset: synthetic controller data with the app's own networking code.
+cc_binary(
+    name = "fake_headset",
+    srcs = ["fake_headset.cpp"],
+    deps = [":core"],
+)

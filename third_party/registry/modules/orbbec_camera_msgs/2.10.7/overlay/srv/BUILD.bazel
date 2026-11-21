@@ -1,0 +1,133 @@
+# Generated for orbbec_camera_msgs (see third_party/registry/README.md).
+load("@rosidl_default_generators//:defs.bzl", "ros_service")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "GetActionConfig.srv",
+    "GetAwbGain.srv",
+    "GetBool.srv",
+    "GetCameraInfo.srv",
+    "GetDeviceConfig.srv",
+    "GetDeviceInfo.srv",
+    "GetInt32.srv",
+    "GetString.srv",
+    "GetUserCalibParams.srv",
+    "SendActionCommand.srv",
+    "SetActionConfig.srv",
+    "SetArrays.srv",
+    "SetAwbGain.srv",
+    "SetBagRecording.srv",
+    "SetFilter.srv",
+    "SetInt32.srv",
+    "SetStreamProfile.srv",
+    "SetString.srv",
+    "SetUserCalibParams.srv",
+])
+
+ros_service(
+    name = "GetActionConfig",
+    src = "GetActionConfig.srv",
+)
+
+ros_service(
+    name = "GetAwbGain",
+    src = "GetAwbGain.srv",
+)
+
+ros_service(
+    name = "GetBool",
+    src = "GetBool.srv",
+)
+
+ros_service(
+    name = "GetCameraInfo",
+    src = "GetCameraInfo.srv",
+    deps = [
+        "@sensor_msgs//msg:CameraInfo",
+    ],
+)
+
+ros_service(
+    name = "GetDeviceConfig",
+    src = "GetDeviceConfig.srv",
+)
+
+ros_service(
+    name = "GetDeviceInfo",
+    src = "GetDeviceInfo.srv",
+    deps = [
+        "//msg:DeviceInfo",
+    ],
+)
+
+ros_service(
+    name = "GetInt32",
+    src = "GetInt32.srv",
+)
+
+ros_service(
+    name = "GetString",
+    src = "GetString.srv",
+)
+
+ros_service(
+    name = "GetUserCalibParams",
+    src = "GetUserCalibParams.srv",
+)
+
+ros_service(
+    name = "SendActionCommand",
+    src = "SendActionCommand.srv",
+)
+
+ros_service(
+    name = "SetActionConfig",
+    src = "SetActionConfig.srv",
+)
+
+ros_service(
+    name = "SetArrays",
+    src = "SetArrays.srv",
+)
+
+ros_service(
+    name = "SetAwbGain",
+    src = "SetAwbGain.srv",
+)
+
+ros_service(
+    name = "SetBagRecording",
+    src = "SetBagRecording.srv",
+)
+
+ros_service(
+    name = "SetFilter",
+    src = "SetFilter.srv",
+    deps = [
+        "//msg:DepthFilterParam",
+    ],
+)
+
+ros_service(
+    name = "SetInt32",
+    src = "SetInt32.srv",
+)
+
+ros_service(
+    name = "SetStreamProfile",
+    src = "SetStreamProfile.srv",
+    deps = [
+        "//msg:StreamProfile",
+    ],
+)
+
+ros_service(
+    name = "SetString",
+    src = "SetString.srv",
+)
+
+ros_service(
+    name = "SetUserCalibParams",
+    src = "SetUserCalibParams.srv",
+)

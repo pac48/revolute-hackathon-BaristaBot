@@ -1,0 +1,26 @@
+# @manifoldplus: ManifoldPlus (https://github.com/hjwdzh/ManifoldPlus), watertight
+# manifold conversion; foam's `manifold` tool. Uses @eigen and @libigl at the
+# commit ManifoldPlus pins.
+# License: MIT
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "manifold",
+    srcs = glob(["src/*.cc", "src/*.h"]),
+    copts = [
+        "-w",
+        "-O3",  # optimize even in fastbuild
+        "-include",
+        "cstdlib",  # Parser.cc uses exit() without including it
+    ],
+    cxxopts = ["-std=c++14"],  # std::random_shuffle (removed in C++17)
+    includes = ["src"],
+    linkopts = ["-lpthread"],
+    deps = [
+        "@eigen",
+        "@libigl",
+    ],
+)

@@ -1,0 +1,41 @@
+# two_link_arm model data: only descriptions of the robot and its scene
+# (kinematics, dynamics, geometry, sensors), with no ROS or controller config
+# and no code. Functionality built on these files is in ../two_link_arm.
+# Each file is a py_data_library:
+#   from src.robot_model.two_link_arm_data import urdf; urdf.path()
+
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["scene.xml"])
+
+# MuJoCo MJCF: bodies, joints, actuators, floor and lighting. This is the
+# single source of truth for the model; the URDF below is generated from it.
+py_data_library(
+    name = "mjcf",
+    src = "scene.xml",
+)
+
+# URDF generated from the MJCF: links, joints, limits, inertias, geometry.
+genrule(
+    name = "urdf_gen",
+    srcs = ["scene.xml"],
+    outs = ["robot.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) $< $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "urdf",
+    src = "robot.urdf",
+)
+
+# Every file that makes up the model.
+filegroup(
+    name = "model",
+    srcs = [
+        "robot.urdf",
+        "scene.xml",
+    ],
+)

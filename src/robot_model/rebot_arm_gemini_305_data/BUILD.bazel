@@ -1,0 +1,151 @@
+# reBot Arm B601-RS with an Orbbec Gemini 305 on the wrist: model data only, with no ROS and
+# no code. Functionality built on these files is in ../rebot_arm_gemini_305.
+#
+# The composition is MJCF's <attach>: the arm's MJCF (rebot_arm_data) with the camera model
+# (//src/camera_models/gemini_305_data) attached at the arm's wrist_camera_optical_frame, where
+# the reBot-DevArm's D405 sat (its color optical frame; the Gemini's left color optical frame
+# is placed on it). MuJoCo needs an attach in the body it attaches to, so rs_arm.xml includes
+# wrist_camera.xml at that frame and scene.xml (with the camera model and the floor) wraps it.
+# Each file is a py_data_library:
+#   from src.robot_model.rebot_arm_gemini_305_data import mjcf, urdf; mjcf.path()
+
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+load("//src/robot_model/robot_model_utils:symlink_tree.bzl", "symlink_tree")
+load("//src/robot_model/robot_model_utils/spherize:spherize.bzl", "sphere_editor", "spherized_robot", "spheres_model")
+
+package(default_visibility = ["//visibility:public"])
+
+# Shared by the model that attaches this arm twice (rebot_dual_arm_gemini_305_data).
+exports_files(["mjcf/wrist_camera.xml"])
+
+# What scene.xml loads by relative path: the arm's rs_arm.xml (which includes wrist_camera.xml),
+# its meshes (meshdir "meshes") and the camera model with its meshes (meshes/gemini305/), linked
+# next to it. Edit mjcf/scene.xml and mjcf/wrist_camera.xml directly.
+symlink_tree(
+    name = "files",
+    srcs = [
+        "mjcf/scene.xml",
+        "mjcf/wrist_camera.xml",
+        "//src/robot_model/rebot_arm_data:mjcf/rs_arm.xml",
+        "//src/camera_models/gemini_305_data:gemini_305.xml",
+        "//src/camera_models/usb_camera_data:usb_camera.xml",
+        "@orbbec_description//:meshes",
+        "@rebot_arm_description//:rs_meshes",
+    ],
+    layout = {
+        "/rebot_arm_gemini_305_data/mjcf/": "",
+        "/rebot_arm_data/mjcf/": "",
+        "/camera_models/gemini_305_data/": "",
+        "/camera_models/usb_camera_data/": "",
+        "/RS/meshes/": "meshes/",
+        "/meshes/gemini305/": "meshes/gemini305/",
+    },
+)
+
+filegroup(
+    name = "scene.xml",
+    srcs = [":files"],
+    output_group = "scene.xml",
+    data = [":files"],
+)
+
+# MuJoCo MJCF of the arm with the camera. The single source of truth for the model; the URDF
+# below is generated from it. Its runfiles include the meshes.
+py_data_library(
+    name = "mjcf",
+    src = ":scene.xml",
+)
+
+# URDF generated from the MJCF (links and joints as MuJoCo has them, no meshes): kinematics
+# and the planner's collision model start from this.
+genrule(
+    name = "urdf_gen",
+    srcs = [
+        ":scene.xml",
+        ":files",
+    ],
+    outs = ["robot.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) $(execpath :scene.xml) $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "urdf",
+    src = "robot.urdf",
+)
+
+# The same URDF with the visual meshes, for the ROS robot_description (RViz). The arm's
+# meshes are package://rebot_arm_description/meshes/..., the camera's
+# package://orbbec_description/meshes/gemini305/... (the layout of both packages).
+genrule(
+    name = "visual_urdf_gen",
+    srcs = [
+        ":scene.xml",
+        ":files",
+    ],
+    outs = ["visual.urdf"],
+    cmd = "$(execpath //src/robot_model/mjcf_to_urdf) --mesh-prefix package://rebot_arm_description/meshes/ " +
+          "$(execpath :scene.xml) $@ && " +
+          "sed -i 's#package://rebot_arm_description/meshes/gemini305/#package://orbbec_description/meshes/gemini305/#' $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "visual_urdf",
+    src = "visual.urdf",
+)
+
+# USD of the arm with the camera, for rendering: scene.usda layers the USD of the base models
+# (the arm's, the camera's), the scene camera's and the shared environment, as scene.xml attaches the
+# camera's MJCF.
+filegroup(
+    name = "scene_usd",
+    srcs = ["scene.usda"],
+    data = [
+        ":scene_camera_usd",
+        "//src/camera_models/gemini_305_data:usd",
+        "//src/robot_model/rebot_arm_data:environment_usd",
+        "//src/robot_model/rebot_arm_data:rebot_arm_usd",
+    ],
+)
+
+# The scene camera's USD layer (its pose in this scene).
+filegroup(
+    name = "scene_camera_usd",
+    srcs = ["scene_camera.usda"],
+)
+
+# Collision model for motion planning (VAMP): the arm's spheres (rebot_arm_data:rs_spheres.yaml,
+# gripper joints fixed) and the camera's (camera_spheres.yaml) merged into this model's URDF ->
+# vamp.urdf + .srdf. Spherizing is per model: the camera is part of this robot's collision
+# model, so the arm's rs_vamp doesn't see it. To change the arm's spheres edit rs_spheres.yaml
+# (re-seeding: see rebot_arm_data/BUILD.bazel).
+spherized_robot(
+    name = "vamp",
+    specs = [
+        "//src/robot_model/rebot_arm_data:rs_spheres.yaml",
+        "camera_spheres.yaml",
+    ],
+    urdf = ":robot.urdf",
+)
+
+# Edit the spheres (the arm's and the camera's) in Blender: bazel run :export_spheres, edit spheres.obj,
+# bazel run :import_spheres.
+sphere_editor(
+    mjcf = ":scene.xml",
+    specs = [
+        "//src/robot_model/rebot_arm_data:rs_spheres.yaml",
+        "camera_spheres.yaml",
+    ],
+    urdf = ":robot.urdf",
+)
+
+# The model's MJCF with the spheres as its collision geoms, and its viewer: bazel run :view_spheres
+spheres_model(
+    scene = "scene.xml",
+    specs = [
+        "//src/robot_model/rebot_arm_data:rs_spheres.yaml",
+        "//src/robot_model/rebot_arm_gemini_305_data:camera_spheres.yaml",
+    ],
+    tree = ":files",
+)

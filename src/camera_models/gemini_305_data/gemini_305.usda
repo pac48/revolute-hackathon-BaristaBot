@@ -1,0 +1,132 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# Simplified stand-in for the Orbbec Gemini 305: one Xform per MJCF body (gemini_305.xml),
+# named after it, at its world pose in the composed model (rebot_arm_gemini_305_data) at the
+# default configuration, with the MJCF cameras (left_color, right_color) as USD cameras. The
+# poses are overwritten from mjData at run time. Replace the boxes with the real asset; keep the
+# Xform and camera names (gemini_305_usd_test checks them against the MJCF).
+
+def Xform "World"
+{
+    def Xform "camera_bottom_screw"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.175175, 0.000261584, 0.31146, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.00104835, -5.35041e-07, 0.0209995)
+            float3 xformOp:scale = (0.0163501, 0.042002, 0.0420023)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "camera_rear_screw_R"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.176471, -0.0098249, 0.335058, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0027464, 0.00999654, 1.16647e-06)
+            float3 xformOp:scale = (0.00550001, 0.0399178, 0.0399179)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "camera_rear_screw_L"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.176632, 0.0101744, 0.335119, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0027464, -0.0100035, 1.16573e-06)
+            float3 xformOp:scale = (0.00550001, 0.0399178, 0.0399179)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "camera_link"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.192983, 0.00907561, 0.325361, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+    def Xform "camera_left_color_frame"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.192983, 0.00907561, 0.325361, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.0037, -1.50466e-10, 0.000215042)
+            float3 xformOp:scale = (0.0054, 0.012, 0.0115202)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "camera_left_color_optical_frame"
+    {
+        matrix4d xformOp:transform = ( (-0.0080645, -0.999963, -0.00307084, 0), (-0.512172, 0.00676808, -0.858856, 0), (0.858845, -0.00535345, -0.512208, 0), (0.192983, 0.00907561, 0.325361, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Camera "left_color"
+        {
+            matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, -1, 1.22465e-16, 0), (0, -1.22465e-16, -1, 0), (0, 0, 0, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+            float focalLength = 18.836
+            float verticalAperture = 24
+            float horizontalAperture = 42.667
+            float2 clippingRange = (0.01, 100)
+        }
+    }
+    def Xform "camera_right_color_frame"
+    {
+        matrix4d xformOp:transform = ( (0.858845, -0.00535345, -0.512208, 0), (0.0080645, 0.999963, 0.00307084, 0), (0.512172, -0.00676808, 0.858856, 0), (0.192838, -0.00892372, 0.325306, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.0037, -1.50466e-10, 0.000215042)
+            float3 xformOp:scale = (0.0054, 0.012, 0.0115202)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "camera_right_color_optical_frame"
+    {
+        matrix4d xformOp:transform = ( (-0.0080645, -0.999963, -0.00307084, 0), (-0.512172, 0.00676808, -0.858856, 0), (0.858845, -0.00535345, -0.512208, 0), (0.192838, -0.00892372, 0.325306, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Camera "right_color"
+        {
+            matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, -1, 1.22465e-16, 0), (0, -1.22465e-16, -1, 0), (0, 0, 0, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+            float focalLength = 18.836
+            float verticalAperture = 24
+            float horizontalAperture = 42.667
+            float2 clippingRange = (0.01, 100)
+        }
+    }
+}
+
+# One RenderProduct per MJCF camera, at its resolution; they share the LdrColor var of the
+# environment layer (/Render/Vars/LdrColor).
+def Scope "Render"
+{
+    def RenderProduct "left_color"
+    {
+        rel camera = </World/camera_left_color_optical_frame/left_color>
+        uniform int2 resolution = (1280, 720)
+        rel orderedVars = </Render/Vars/LdrColor>
+    }
+    def RenderProduct "right_color"
+    {
+        rel camera = </World/camera_right_color_optical_frame/right_color>
+        uniform int2 resolution = (1280, 720)
+        rel orderedVars = </Render/Vars/LdrColor>
+    }
+}

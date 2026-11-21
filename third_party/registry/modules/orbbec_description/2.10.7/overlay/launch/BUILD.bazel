@@ -1,0 +1,24 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "launch_files",
+    srcs = [
+        "launch_utils.py",
+        "view_model.launch.py",
+    ],
+)
+
+# bazel run @orbbec_description//launch:view_model_launch -- model:=gemini_305.urdf.xacro
+launch_ros_binary(
+    name = "view_model_launch",
+    src = "view_model.launch.py",
+    data = ["//:ament_index"],
+    deps = [
+        "@ament_index_python",
+        "@robot_state_publisher",
+        "@rviz2",
+        "@xacro//:xacro_lib",
+    ],
+)

@@ -1,0 +1,5 @@
+# The active robot model: every app that takes --model (mujoco_arm_sim, real_arm, teleop, plan_to,
+# move_cartesian, mpc_reach, parallel_sim, ...) uses it unless given --model. Edit the line below to
+# switch them all; commit it to share it. One of the packages in src/robot_model/, e.g. rebot_arm,
+# rebot_arm_gemini_305, rebot_dual_arm_gemini_305 or two_link_arm (not every app supports every model).
+rebot_dual_arm_gemini_305

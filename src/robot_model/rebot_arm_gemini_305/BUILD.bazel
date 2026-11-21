@@ -1,0 +1,191 @@
+# rebot_arm_gemini_305: functionality for the reBot Arm B601-RS with an Orbbec Gemini 305 on the
+# wrist (C++: load_mujoco_model, make_planner, make_kinematics; Python: description.robot_description
+# for ros2_control), built on the model files in ../rebot_arm_gemini_305_data. The arm is the
+# reBot's (../rebot_arm): same joints and actuators (its PIDs are reused here), with the camera in
+# the model and in the planner's collision model.
+
+load("//src/robot_model/robot_model_utils:viewer.bzl", "model_viewer")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//src/robot_model/robot_model_utils:fast_kinematics.bzl", "fast_kinematics")
+load("//third_party/vamp:defs.bzl", "VAMP_COPTS", "vamp_robot")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "rebot_arm_gemini_305",
+    srcs = ["rebot_arm_gemini_305.cpp"],
+    hdrs = ["rebot_arm_gemini_305.hpp"],
+    # The .cpp instantiates VampPlanner; the header is VAMP-free.
+    copts = VAMP_COPTS,
+    data = [
+        "//src/robot_model/rebot_arm_gemini_305_data:files",  # meshes and the camera model, next to scene.xml
+        "//src/robot_model/rebot_arm_gemini_305_data:scene.xml",
+    ],
+    local_defines = [
+        "REBOT_ARM_GEMINI_305_MJCF=\\\"$(rlocationpath //src/robot_model/rebot_arm_gemini_305_data:scene.xml)\\\"",
+    ],
+    deps = [
+        ":rebot_arm_gemini_305_kinematics",
+        ":rebot_arm_gemini_305_vamp",
+        "//src/robot_model/robot_model_utils:kdl_kinematics",
+        "//src/robot_model/robot_model_utils:kinematics",
+        "//src/robot_model/robot_model_utils:motion_planner",
+        "//src/robot_model/robot_model_utils:mujoco_model",
+        "//src/robot_model/robot_model_utils:state_estimator",
+        "//src/robot_model/robot_model_utils:renderer_api",
+        "//src/robot_model/robot_model_utils:vamp_planner",
+    ],
+)
+
+# rebot_arm_gemini_305::usd_path and make_renderer (renderer.hpp): link this to render. Separate from
+# :rebot_arm_gemini_305 because ovrtx and its runtime (1.4 GB, an NVIDIA RTX GPU to run) are a dependency only rendering needs.
+cc_library(
+    name = "rebot_arm_gemini_305_renderer",
+    srcs = ["rebot_arm_gemini_305_renderer.cpp"],
+    data = ["//src/robot_model/rebot_arm_gemini_305_data:scene_usd"],
+    local_defines = [
+        "REBOT_ARM_GEMINI_305_USD=\\\"$(rlocationpath //src/robot_model/rebot_arm_gemini_305_data:scene_usd)\\\"",
+    ],
+    deps = [
+        ":rebot_arm_gemini_305",
+        "//src/robot_model/robot_model_utils:mujoco_model",
+        "//src/robot_model/robot_model_utils:renderer",
+    ],
+)
+
+# The USD files (the arm's, the camera's, the environment) correspond to the composed MJCF (no GPU needed).
+cc_test(
+    name = "rebot_arm_gemini_305_usd_test",
+    size = "small",
+    srcs = ["rebot_arm_gemini_305_usd_test.cpp"],
+    args = [
+        "$(rlocationpath //src/robot_model/rebot_arm_gemini_305_data:scene_usd)",
+        "$(rlocationpath //src/robot_model/rebot_arm_data:rebot_arm_usd)",
+        "$(rlocationpath //src/camera_models/gemini_305_data:usd)",
+        "$(rlocationpath //src/robot_model/rebot_arm_gemini_305_data:scene_camera_usd)",
+        "$(rlocationpath //src/robot_model/rebot_arm_data:environment_usd)",
+    ],
+    data = [
+        "//src/camera_models/gemini_305_data:usd",
+        "//src/robot_model/rebot_arm_gemini_305_data:scene_camera_usd",
+        "//src/robot_model/rebot_arm_data:environment_usd",
+        "//src/robot_model/rebot_arm_data:rebot_arm_usd",
+        "//src/robot_model/rebot_arm_gemini_305_data:scene_usd",
+    ],
+    deps = [
+        ":rebot_arm_gemini_305",
+        "//src/robot_model/robot_model_utils:usd_correspondence",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Renders with ovrtx (NVIDIA RTX GPU, outside any sandbox; the first run compiles shaders). Not in //...
+cc_test(
+    name = "rebot_arm_gemini_305_render_test",
+    size = "large",
+    srcs = ["rebot_arm_gemini_305_render_test.cpp"],
+    tags = [
+        "local",
+        "manual",
+        "requires-gpu",
+    ],
+    deps = [
+        ":rebot_arm_gemini_305_renderer",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "rebot_arm_gemini_305_test",
+    size = "small",
+    srcs = ["rebot_arm_gemini_305_test.cpp"],
+    deps = [
+        ":rebot_arm_gemini_305",
+        "//src/robot_model/rebot_arm",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Python: robot_description() for ros2_control (URDF + mujoco_ros2_control block).
+py_library(
+    name = "description",
+    srcs = ["description.py"],
+    deps = [
+        "//src/robot_model/rebot_arm:description",
+        "//src/robot_model/rebot_arm:pids",
+        "//src/robot_model/rebot_arm_gemini_305_data:mjcf",
+        "//src/robot_model/rebot_arm_gemini_305_data:visual_urdf",
+        "//src/robot_model/robot_model_utils:ros2_control",
+    ],
+)
+
+py_test(
+    name = "description_test",
+    size = "small",
+    srcs = ["description_test.py"],
+    # What RViz resolves the URDF's package:// mesh URIs through.
+    data = [
+        "@rebot_arm_description//:ament_index",
+        "@orbbec_description//:ament_index",
+    ],
+    deps = [
+        ":description",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+# ---- Motion planning (VAMP) ---------------------------------------------------
+
+# VAMP robot code (vamp::robots::RebotArmGemini305), generated at build time by cricket from this
+# model's spherized URDF: the arm's spheres and the camera's (rebot_arm_gemini_305_data:vamp).
+vamp_robot(
+    name = "rebot_arm_gemini_305_vamp",
+    end_effector = "gripper_end",
+    module = "rebot_arm_gemini_305",
+    srdf = "//src/robot_model/rebot_arm_gemini_305_data:vamp.srdf",
+    struct_name = "RebotArmGemini305",
+    urdf = "//src/robot_model/rebot_arm_gemini_305_data:vamp.urdf",
+    visibility = ["//visibility:private"],
+)
+
+# Planner CLI: JSON request on stdin -> path on stdout (robot_model_utils/planner_cli.hpp).
+cc_binary(
+    name = "plan",
+    srcs = ["plan_main.cpp"],
+    deps = [
+        ":rebot_arm_gemini_305",
+        "//src/robot_model/robot_model_utils:planner_cli",
+    ],
+)
+
+# ---- Kinematics (fast_robot_kinematics) ---------------------------------------
+
+# rebot_arm_gemini_305_kinematics::make_kinematics: FK/IK of base_link -> gripper_end, generated
+# at build time from the composed model's URDF.
+fast_kinematics(
+    name = "rebot_arm_gemini_305_kinematics",
+    namespace = "rebot_arm_gemini_305_kinematics",
+    root_link = "base_link",
+    tip_link = "gripper_end",
+    urdf = "//src/robot_model/rebot_arm_gemini_305_data:robot.urdf",
+    visibility = ["//visibility:private"],
+)
+
+# Kinematics CLI: JSON FK / dense IK request on stdin -> answer on stdout
+# (robot_model_utils/kinematics_cli.hpp).
+cc_binary(
+    name = "kinematics",
+    srcs = ["kinematics_main.cpp"],
+    deps = [
+        ":rebot_arm_gemini_305",
+        "//src/robot_model/robot_model_utils:kinematics_cli",
+    ],
+)
+
+# Inspect the model: bazel run //src/robot_model/rebot_arm_gemini_305:view  (MuJoCo viewer; see robot_model_utils/viewer.py)
+model_viewer(
+    name = "view",
+    mjcf = "//src/robot_model/rebot_arm_gemini_305_data:scene.xml",
+    data = ["//src/robot_model/rebot_arm_gemini_305_data:files"],
+)

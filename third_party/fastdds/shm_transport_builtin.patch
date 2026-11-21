@@ -1,0 +1,18 @@
+Enable shared memory in Fast DDS's builtin (default) transports.
+
+Upstream's CMake build defines SHM_TRANSPORT_BUILTIN by default
+(SHM_TRANSPORT_DEFAULT=ON), which adds the shared memory transport to the
+default transports next to UDPv4. The RCR's Bazel build doesn't, so ROS
+processes on the same machine talked over UDP loopback only (no shared memory
+segments were created). FASTDDS_BUILTIN_TRANSPORTS=DEFAULT?... in .bazelrc then
+gives shared memory + UDPv4 as upstream intends.
+
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -98,5 +98,6 @@
+     }),
+     local_defines = [
++        "SHM_TRANSPORT_BUILTIN",
+         "USE_THIRDPARTY_SHARED_MUTEX=1",
+     ] + select({
+         "@platforms//os:windows": ["WIN32_LEAN_AND_MEAN"],

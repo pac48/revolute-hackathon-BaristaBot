@@ -1,0 +1,66 @@
+# BUILD file for @rebot_arm_description: the Rebot_Arm_description/ directory
+# of https://github.com/Seeed-Projects/reBot-DevArm (fetched by http_archive in
+# MODULE.bazel). Each model target is its main file, with the meshes it loads
+# by relative path (../meshes) carried as runfiles, so the layout stays intact.
+#
+# The RS MJCF (rs_arm.xml, rs_grasp_scene.xml) is vendored in //src/robot_model/rebot_arm_data.
+#
+# Licenses: CERN-OHL-W-2.0 for the arm; the removed wrist camera assets were Apache-2.0 /
+# MIT (see :licenses and RS/mjcf/THIRD_PARTY_MODELS.md).
+
+load("@rosdistro//ament:defs.bzl", "ament_index")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "licenses",
+    srcs = glob([
+        "Camera/licenses/*",
+        "DM/mjcf/SOURCE_LICENSE.txt",
+        "RS/mjcf/THIRD_PARTY_MODELS.md",
+        "RS/mjcf/licenses/*",
+    ]),
+)
+
+# ---- B601-RS ------------------------------------------------------------------
+
+filegroup(
+    name = "rs_meshes",
+    srcs = glob(["RS/meshes/**"]),
+)
+
+filegroup(
+    name = "rs_urdf",
+    srcs = ["RS/urdf/ReBot_Arm_RS.urdf"],
+    data = [":rs_meshes"],
+)
+
+# The RS meshes as ROS package rebot_arm_description (share/rebot_arm_description/meshes/...), so a
+# robot_description's package://rebot_arm_description/meshes/... URIs resolve wherever RViz has
+# this index in its data (RViz on another machine than the simulation can't use file:// paths).
+ament_index(
+    name = "ament_index",
+    export_name = "rebot_arm_description",
+    data = [":rs_meshes"],
+    data_strip_prefix = "RS",
+)
+
+# ---- B601-DM ------------------------------------------------------------------
+
+filegroup(
+    name = "dm_meshes",
+    srcs = glob(["DM/meshes/**"]),
+)
+
+# Material-separated visual model (no actuators).
+filegroup(
+    name = "dm_mjcf",
+    srcs = ["DM/mjcf/rebotarm_b601_colored.xml"],
+    data = [":dm_meshes"],
+)
+
+filegroup(
+    name = "dm_urdf",
+    srcs = ["DM/urdf/ReBot_Arm_DM.urdf"],
+    data = [":dm_meshes"],
+)

@@ -1,0 +1,46 @@
+# The reBot Arm B601-RS's controller settings: the one place to change them. Every reBot controller config
+# is generated from this file (rebot_controller_config.py, at build time), so the simulation and the real arm,
+# one arm and two (left_/right_ prefixes), always run the same values:
+#   config/rebot_arm/controllers.yaml                  sim, one arm (also rebot_arm_gemini_305)
+#   config/rebot_dual_arm_gemini_305/controllers.yaml  sim, two arms
+#   config/rebot_arm_real/{controllers,gripper}.yaml   real, one arm
+#   config/rebot_dual_arm_real/{controllers,gripper}.yaml  real, two arms
+# (in bazel-bin/src/ros2_control_sim/). The controller is //src/controllers/joint_impedance_controller, named
+# joint_trajectory_controller so TrajectoryClient, teleop and the CLIs find the interface they use; goals may
+# command a subset of the joints (a planner's arm joints, one arm's).
+
+# Controller manager rate, Hz: the one value that differs. The real motors run the MIT law in their own fast
+# loop between updates, so 200 Hz (upstream's rate for this arm) is enough there. The sim's
+# //src/ros2_control_sim/mit_system_interface evaluates it once per update and holds the torque in between,
+# which at 200 Hz makes the gains below limit-cycle (every joint at ~83 Hz, the wrists' effort saturating):
+# the sim runs 1 kHz to behave like the motors.
+update_rate:
+  sim: 1000
+  real: 200
+
+# No ros2_control joint limit enforcement. Its limiter throws when a joint's *measured* position passes a URDF
+# limit (e.g. joint6 tracking a command at +-3.14 overshoots by ~0.01 rad), and the controller manager then
+# deactivates the controller mid-motion, which drops the arm. Commands stay inside the limits upstream instead
+# (IK box constraints; teleop's --limit-margin), and MuJoCo enforces the joint ranges.
+enforce_command_limits: false
+
+# The arm joints' MIT-mode feedback gains (position: N*m/rad, velocity: N*m*s/rad), as the real motors take
+# them. Raise them with care: they go to the real arm too. //src/ros2_control_sim:stationary_diagnostic
+# measures how still the (simulated) arm is at a pose.
+arm_gains:
+  joint1: {stiffness: 40.0, damping: 5.0}
+  joint2: {stiffness: 40.0, damping: 5.0}
+  joint3: {stiffness: 40.0, damping: 5.0}
+  joint4: {stiffness: 20.0, damping: 2.5}
+  joint5: {stiffness: 20.0, damping: 2.5}
+  joint6: {stiffness: 20.0, damping: 2.5}
+
+# The gripper (joint7) differs by necessity: the sim's is a slide on an effort interface (joint_left/
+# joint_right follow it through MJCF equality constraints), the real one's protocol (RebotGripperProtocol)
+# takes a position (m: 0 closed .. 0.05 open) and a speed limit and runs the motor's MIT loop itself (kp 50,
+# kd 4 in the real_description).
+gripper:
+  sim: {stiffness: 2000.0, damping: 50.0}  # N/m, N*s/m
+  # Speed limit (m/s) of the slew, up to 0.2 (real_description's interface maximum): 0.08 is 0.6 s over the
+  # 0.05 m stroke. (The protocol's default, 0.0125, takes 4 s.)
+  real: {velocity_limit: 0.08}

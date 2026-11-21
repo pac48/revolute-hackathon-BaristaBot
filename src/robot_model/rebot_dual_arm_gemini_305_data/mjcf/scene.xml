@@ -1,0 +1,31 @@
+<mujoco model="rebot_dual_arm_gemini_305">
+  <!-- Two reBot arms with a Gemini 305 each (arm.xml), side by side: the same orientation (x forward),
+       the same x, 34.5 cm apart in y (bases at y = +0.1725 "left" and -0.1725 "right"). Everything in
+       an arm is prefixed: left_joint1, left_gripper_end, left_camera_link, ... Plus a light,
+       MuJoCo's usual checker floor (a plane at z = 0 that the arms' bases stand on) and a scene camera. -->
+  <asset>
+    <model name="arm" file="arm.xml"/>
+    <model name="usb_camera" file="usb_camera.xml"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1=".1 .2 .3" rgb2=".2 .3 .4" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 .05" type="plane" material="grid"/>
+    <frame pos="0 0.1725 0">
+      <attach model="arm" body="base_link" prefix="left_"/>
+    </frame>
+    <frame pos="0 -0.1725 0">
+      <attach model="arm" body="base_link" prefix="right_"/>
+    </frame>
+    <!-- Scene camera (//src/camera_models/usb_camera, like the real setup's usb_cam): fixed in front of
+         the arms, looking back at the workspace between them (its x axis from (0.9, 0, 0.6) toward
+         (0.25, 0, 0.15)), as in the single arm's scene. Bodies scene_camera_link and
+         scene_camera_optical_frame, MuJoCo camera scene_color. A nominal pose: set it to the real
+         camera's when that is measured. -->
+    <frame pos="0.9 0 0.6" xyaxes="-0.8222 0 -0.5692 0 -1 0">
+      <attach model="usb_camera" body="camera_link" prefix="scene_"/>
+    </frame>
+  </worldbody>
+</mujoco>

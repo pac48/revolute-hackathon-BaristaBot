@@ -1,0 +1,13 @@
+# @pdqsort: pattern-defeating quicksort (header-only), used by VAMP.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# License: Zlib
+
+cc_library(
+    name = "pdqsort",
+    hdrs = ["pdqsort.h"],
+    includes = ["."],
+)

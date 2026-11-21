@@ -1,0 +1,96 @@
+# lerobot_policy: trains a LeRobot policy on our datasets (//src/lerobot_export) and runs it on the arm, through
+# the trajectory controller the data was recorded through.
+#   bazel run //src/lerobot_policy:train -- --dataset.root=recordings/grasp_lerobot
+#   bazel run //src/lerobot_policy:run_policy -- CHECKPOINT [--ros-args -p use_sim_time:=true]
+# :policy_runner (PolicyRunner) is the policy without ROS: observations in, joint targets out.
+
+load("@pip_lerobot//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+# lerobot-train with this repo's defaults (train.py).
+py_binary(
+    name = "train",
+    srcs = ["train.py"],
+    deps = [
+        "//src/lerobot_export:lerobot",
+        requirement("accelerate"),
+    ],
+)
+
+py_test(
+    name = "train_test",
+    size = "small",
+    srcs = ["train_test.py"],
+    deps = [":train"],
+)
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "policy_runner",
+    srcs = ["policy_runner.py"],
+    deps = [
+        "//src/lerobot_export:conventions",
+        "//src/lerobot_export:lerobot",
+        "//src/trajectory_generator:cartesian_path",
+        "//src/trajectory_generator:kinematics_client",
+        requirement("numpy"),
+    ],
+)
+
+py_library(
+    name = "testing",
+    testonly = True,
+    srcs = ["testing.py"],
+    deps = [
+        "//src/lerobot_export:conventions",
+        "//src/lerobot_export:lerobot",
+        requirement("numpy"),
+    ],
+)
+
+py_test(
+    name = "policy_runner_test",
+    size = "medium",
+    srcs = ["policy_runner_test.py"],
+    deps = [
+        ":policy_runner",
+        ":testing",
+        "//src/lerobot_export:conventions",
+        "//src/trajectory_generator:kinematics_client",
+        requirement("numpy"),
+    ],
+)
+
+# On the GPU (CUDA found, a full-size ACT on three 720p cameras within a 20 Hz period). Not in //...:
+#   bazel test //src/lerobot_policy:policy_runner_gpu_test --test_output=all
+py_test(
+    name = "policy_runner_gpu_test",
+    size = "medium",
+    srcs = ["policy_runner_gpu_test.py"],
+    tags = [
+        "local",
+        "manual",
+        "requires-gpu",
+    ],
+    deps = [
+        ":policy_runner",
+        ":testing",
+        "//src/lerobot_export:conventions",
+        requirement("numpy"),
+    ],
+)
+
+py_binary(
+    name = "run_policy",
+    srcs = ["run_policy.py"],
+    deps = [
+        ":policy_runner",
+        "//src/lerobot_export:conventions",
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+        requirement("numpy"),
+    ],
+)

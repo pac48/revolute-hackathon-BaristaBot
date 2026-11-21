@@ -1,0 +1,7 @@
+# Python packages foam (//third_party/foam) imports at runtime. numpy is pinned
+# to the ROS distro's version (@pip_ros) so both hubs agree.
+numpy==2.4.6
+scipy
+trimesh==4.5.3
+xmltodict==0.14.2
+vhacdx  # trimesh.decomposition.convex_decomposition, foam's last-resort mesh repair

@@ -1,0 +1,27 @@
+# NVIDIA ovstage C SDK (the scene store ovrtx renders), from the manylinux_2_35_x86_64 wheel:
+# headers, the shared forwarding loader and the runtime payload (bin/). See @ovrtx_sdk.
+
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["ovstage/bin/libovstage-dynamic.so"])
+
+filegroup(
+    name = "runtime",
+    srcs = glob(["ovstage/bin/**"]),
+)
+
+# The shared forwarding loader (see @ovrtx_sdk): a C ABI.
+cc_import(
+    name = "loader",
+    shared_library = "ovstage/bin/libovstage-dynamic.so",
+)
+
+cc_library(
+    name = "ovstage",
+    hdrs = glob(["ovstage/include/**/*.h"]),
+    data = [":runtime"],
+    includes = ["ovstage/include"],
+    deps = [":loader"],
+)

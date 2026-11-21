@@ -1,0 +1,14 @@
+# Position PIDs for the reBot's torque (<motor>) actuators: mujoco_ros2_control
+# needs them to accept position commands. Output is clamped to each motor's
+# MJCF ctrlrange. Parameters are read by its internal node.
+mujoco_ros2_control_node:
+  ros__parameters:
+    pid_gains:
+      position:
+        joint1: {p: 200.0, i: 50.0, d: 10.0, i_clamp_max: 10.0, i_clamp_min: -10.0, u_clamp_max: 36.0, u_clamp_min: -36.0, antiwindup_strategy: conditional_integration}
+        joint2: {p: 200.0, i: 50.0, d: 10.0, i_clamp_max: 10.0, i_clamp_min: -10.0, u_clamp_max: 36.0, u_clamp_min: -36.0, antiwindup_strategy: conditional_integration}
+        joint3: {p: 200.0, i: 50.0, d: 10.0, i_clamp_max: 10.0, i_clamp_min: -10.0, u_clamp_max: 36.0, u_clamp_min: -36.0, antiwindup_strategy: conditional_integration}
+        joint4: {p: 50.0, i: 10.0, d: 2.0, i_clamp_max: 5.0, i_clamp_min: -5.0, u_clamp_max: 14.0, u_clamp_min: -14.0, antiwindup_strategy: conditional_integration}
+        joint5: {p: 50.0, i: 10.0, d: 2.0, i_clamp_max: 5.0, i_clamp_min: -5.0, u_clamp_max: 14.0, u_clamp_min: -14.0, antiwindup_strategy: conditional_integration}
+        joint6: {p: 50.0, i: 10.0, d: 2.0, i_clamp_max: 5.0, i_clamp_min: -5.0, u_clamp_max: 14.0, u_clamp_min: -14.0, antiwindup_strategy: conditional_integration}
+        joint7: {p: 2000.0, i: 0.0, d: 50.0, u_clamp_max: 500.0, u_clamp_min: -500.0}

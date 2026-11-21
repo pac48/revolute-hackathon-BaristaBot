@@ -1,0 +1,101 @@
+# Generated for orbbec_camera_msgs (see third_party/registry/README.md).
+load("@rosidl_default_generators//:defs.bzl", "ros_message")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "DepthFilterParam.msg",
+    "DepthFilterState.msg",
+    "DepthFiltersStatus.msg",
+    "DeviceInfo.msg",
+    "DeviceStatus.msg",
+    "Extrinsics.msg",
+    "IMUInfo.msg",
+    "Metadata.msg",
+    "RGBD.msg",
+    "StreamProfile.msg",
+    "StreamStatus.msg",
+])
+
+ros_message(
+    name = "DepthFilterParam",
+    src = "DepthFilterParam.msg",
+)
+
+ros_message(
+    name = "DepthFilterState",
+    src = "DepthFilterState.msg",
+    deps = [
+        ":DepthFilterParam",
+    ],
+)
+
+ros_message(
+    name = "DepthFiltersStatus",
+    src = "DepthFiltersStatus.msg",
+    deps = [
+        ":DepthFilterState",
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "DeviceInfo",
+    src = "DeviceInfo.msg",
+    deps = [
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "DeviceStatus",
+    src = "DeviceStatus.msg",
+    deps = [
+        ":StreamStatus",
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "Extrinsics",
+    src = "Extrinsics.msg",
+    deps = [
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "IMUInfo",
+    src = "IMUInfo.msg",
+    deps = [
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "Metadata",
+    src = "Metadata.msg",
+    deps = [
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "RGBD",
+    src = "RGBD.msg",
+    deps = [
+        "@sensor_msgs//msg:CameraInfo",
+        "@sensor_msgs//msg:Image",
+        "@std_msgs//msg:Header",
+    ],
+)
+
+ros_message(
+    name = "StreamProfile",
+    src = "StreamProfile.msg",
+)
+
+ros_message(
+    name = "StreamStatus",
+    src = "StreamStatus.msg",
+)

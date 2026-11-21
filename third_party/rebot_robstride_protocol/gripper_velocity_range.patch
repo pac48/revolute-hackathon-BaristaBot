@@ -1,0 +1,63 @@
+diff -ruN b2/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp b3/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp
+--- b2/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-16 21:34:53.838348560 -0500
++++ b3/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-16 21:38:27.995606011 -0500
+@@ -66,6 +66,8 @@
+     double default_velocity{0.25};
+     // Finger travel in m, or 0 for the normalized joint.
+     double stroke{0.0};
++    // The fastest velocity command, in the joint's unit per second.
++    double velocity_max{1.0};
+     double target_position{std::numeric_limits<double>::quiet_NaN()};
+     double sent_position{std::numeric_limits<double>::quiet_NaN()};
+     double velocity_limit{0.25};
+diff -ruN b2/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp b3/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp
+--- b2/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:35:05.259724028 -0500
++++ b3/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:38:27.995606011 -0500
+@@ -90,15 +90,20 @@
+       throw std::invalid_argument(
+               configuration.name + " open_position and closed_position must be finite and distinct");
+     }
++    const auto limits = codec::limits_for_model(
++      required_parameter(configuration.parameters, "model"));
++    // The fastest speed in the joint's unit: 1 (the whole travel per second) when normalized, or in m/s
++    // the motor's velocity limit over the stroke.
++    device.velocity_max = device.stroke > 0.0 ?
++      limits.velocity_max * device.stroke / std::abs(device.open_position - device.closed_position) :
++      1.0;
+     if (!std::isfinite(device.default_velocity) || device.default_velocity < 0.0 ||
+-      device.default_velocity > joint_limit(device))
++      device.default_velocity > device.velocity_max)
+     {
+       throw std::invalid_argument(
+               configuration.name + " default_velocity must be within [0, " +
+-              std::to_string(joint_limit(device)) + "]");
++              std::to_string(device.velocity_max) + "]");
+     }
+-    const auto limits = codec::limits_for_model(
+-      required_parameter(configuration.parameters, "model"));
+     if (std::abs(device.open_position) > limits.position_max ||
+       std::abs(device.closed_position) > limits.position_max)
+     {
+@@ -198,7 +203,7 @@
+     return true;
+   }
+   if (interface_name == "velocity") {
+-    if (value < 0.0 || value > joint_limit(*device)) {
++    if (value < 0.0 || value > device->velocity_max) {
+       return false;
+     }
+     device->velocity_limit = value / std::abs(unit_scale(*device));
+diff -ruN b2/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp b3/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp
+--- b2/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:35:05.259724028 -0500
++++ b3/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:38:41.599080486 -0500
+@@ -178,7 +178,9 @@
+   ASSERT_TRUE(protocol.process_frame(status(5.0F), std::chrono::steady_clock::now()));  // open
+   EXPECT_FALSE(protocol.set_command("gripper_command_joint", "position", 0.06));
+   EXPECT_FALSE(protocol.set_command("gripper_command_joint", "position", -0.01));
+-  EXPECT_FALSE(protocol.set_command("gripper_command_joint", "velocity", 0.06));
++  // Up to the motor's 33 rad/s over the 5 rad span: 0.33 m/s.
++  EXPECT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.1));
++  EXPECT_FALSE(protocol.set_command("gripper_command_joint", "velocity", 0.4));
+   ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.025));  // half the stroke per s
+   ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));    // close
+ 

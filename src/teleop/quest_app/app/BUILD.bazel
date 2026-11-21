@@ -1,0 +1,51 @@
+# Quest Teleop: native OpenXR app for Meta Quest (NativeActivity, OpenGL ES 3, no engine).
+#   bazel build //src/teleop/quest_app/app:quest_teleop        # -> bazel-bin/src/teleop/quest_app/app/quest_teleop.apk
+#   bazel run //src/teleop/quest_app:launch                    # build, install and start on the headset
+#
+# Built entirely by Bazel with the hermetic Android SDK/NDK (MODULE.bazel). android_binary links
+# the cc deps into lib<name>.so, so the target name must match android.app.lib_name in the
+# manifest (quest_teleop).
+
+load("@rules_android//rules:rules.bzl", "android_binary")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "native",
+    srcs = [
+        "gl_renderer.cpp",
+        "main.cpp",
+        "view_capture.cpp",
+    ],
+    hdrs = [
+        "gl_renderer.h",
+        "view_capture.h",
+    ],
+    copts = ["-Wno-missing-field-initializers"],  # {XR_TYPE_...} initializers zero the rest on purpose
+    local_defines = [
+        "XR_USE_PLATFORM_ANDROID",
+        "XR_USE_GRAPHICS_API_OPENGL_ES",
+    ],
+    # NativeActivity calls ANativeActivity_onCreate (from native_app_glue), which nothing references.
+    linkopts = [
+        "-u ANativeActivity_onCreate",
+        "-landroid",
+        "-llog",
+        "-lEGL",
+        "-lGLESv3",
+        "-ljnigraphics",
+    ],
+    target_compatible_with = ["@platforms//os:android"],
+    alwayslink = True,
+    deps = [
+        "//src/teleop/quest_app/core",
+        "@androidndk//:native_app_glue",
+        "@openxr_loader_android//:openxr_loader",
+    ],
+)
+
+android_binary(
+    name = "quest_teleop",
+    manifest = "AndroidManifest.xml",
+    visibility = ["//src/teleop/quest_app:__subpackages__"],
+    deps = [":native"],
+)

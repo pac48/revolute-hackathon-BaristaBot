@@ -1,0 +1,7 @@
+# Set the whole MuJoCo state of the simulation: qpos (nq values) and qvel (nv values), as MuJoCo orders
+# them (see MujocoState.msg). An empty qvel sets the velocities to zero. The simulation time is kept.
+float64[] qpos
+float64[] qvel
+---
+bool success
+string message

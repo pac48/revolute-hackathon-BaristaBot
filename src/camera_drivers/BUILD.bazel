@@ -1,0 +1,143 @@
+# Camera drivers and streaming tools (the camera models are in //src/camera_models):
+# run usb_cam on one machine (typically the remote
+# build host, with `.remote`) and measure capture -> receive latency and rate here.
+#   bazel run //src/camera_drivers:camera.remote
+#   bazel run //src/camera_drivers:image_latency
+#   bazel run //src/camera_drivers:rviz            # view it
+#   bazel run //src/camera_drivers:orbbec_camera.remote  # Orbbec Gemini 305 driver
+#   bazel run //src/camera_drivers:orbbec_rviz     # view the Orbbec Gemini 305
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+py_data_library(
+    name = "usb_cam_node",
+    src = "@usb_cam//:usb_cam_node_exe",
+)
+
+py_data_library(
+    name = "usb_cam_params",
+    src = "config/usb_cam.yaml",
+)
+
+# Clock echo protocol between camera (echo) and image_latency (prober).
+py_library(
+    name = "clock_probe",
+    srcs = ["clock_probe.py"],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@rclpy",
+    ],
+)
+
+# V4L2 mode enumeration (ioctls) and the auto size/rate policy.
+py_library(
+    name = "v4l2_modes",
+    srcs = ["v4l2_modes.py"],
+)
+
+# usb_cam + clock echo. Stamps are V4L2 capture times on this machine's clock.
+py_binary(
+    name = "camera",
+    srcs = ["camera.py"],
+    deps = [
+        ":clock_probe",
+        ":usb_cam_node",
+        ":usb_cam_params",
+        ":v4l2_modes",
+        "//src/camera_models/camera_model_utils:camera_description",
+        "//src/camera_models/usb_camera:description",
+        "@rclpy",
+        "@std_msgs//:py",
+        requirement("pyyaml"),
+    ],
+)
+
+# Capture -> receive latency, rate, missing frames and throughput.
+py_binary(
+    name = "image_latency",
+    srcs = ["image_latency.py"],
+    deps = [
+        ":clock_probe",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+# RViz showing the camera: bazel run //src/camera_drivers:rviz
+py_data_library(
+    name = "rviz2",
+    src = "@rviz2//:rviz2",
+)
+
+py_data_library(
+    name = "camera_rviz_config",
+    src = "config/camera.rviz",
+)
+
+py_binary(
+    name = "rviz",
+    srcs = ["rviz.py"],
+    deps = [
+        ":camera_rviz_config",
+        ":rviz2",
+    ],
+)
+
+# Orbbec camera driver (Gemini 305): bazel run //src/camera_drivers:orbbec_camera.remote
+py_data_library(
+    name = "orbbec_camera_node",
+    src = "@orbbec_camera//:orbbec_camera_node",
+)
+
+py_binary(
+    name = "orbbec_camera",
+    srcs = ["orbbec_camera.py"],
+    deps = [
+        ":orbbec_camera_node",
+        "//src/camera_models/camera_model_utils:camera_description",
+        "//src/camera_models/gemini_305:description",
+        "@rclpy",
+    ],
+)
+
+# RViz for the Orbbec Gemini 305: bazel run //src/camera_drivers:orbbec_rviz
+py_data_library(
+    name = "orbbec_rviz_config",
+    src = "config/orbbec.rviz",
+)
+
+py_binary(
+    name = "orbbec_rviz",
+    srcs = ["orbbec_rviz.py"],
+    # The compressed image_transport plugin, so RViz's image displays can show
+    # <topic>/compressed (the cameras' MJPEG; orbbec_camera --compressed).
+    # RobotModel display: the URDF parser plugin (urdf, urdf_parser_plugin) and
+    # orbbec_description's meshes (package:// URIs).
+    data = [
+        "@compressed_image_transport//:ament_index",
+        "@orbbec_description//:ament_index",
+        "@urdf//:ament_index",
+        "@urdf_parser_plugin//:ament_index",
+    ],
+    deps = [
+        ":orbbec_rviz_config",
+        ":rviz",
+    ],
+)
+
+py_test(
+    name = "clock_probe_test",
+    size = "small",
+    srcs = ["clock_probe_test.py"],
+    deps = [":clock_probe"],
+)
+
+py_test(
+    name = "v4l2_modes_test",
+    size = "small",
+    srcs = ["v4l2_modes_test.py"],
+    deps = [":v4l2_modes"],
+)

@@ -1,0 +1,27 @@
+Give subclasses of MujocoSystemInterface the ROS node and the per-step control state.
+
+//src/ros2_control_sim/mit_system_interface publishes the whole MuJoCo state (qpos, qvel) on every
+read() and serves a service setting it. It needs the node the system already spins (for the publisher
+and the service) and the ControlState snapshot read() has just taken (the full qpos and qvel, without
+copying mjData). Both are private upstream.
+
+--- a/include/mujoco_ros2_control/mujoco_system_interface.hpp
++++ b/include/mujoco_ros2_control/mujoco_system_interface.hpp
+@@ -160,6 +160,17 @@
+ 
+ protected:
+   rclcpp::Logger get_logger() const;
++  // The node the system spins (services, publishers of subclasses).
++  rclcpp::Node::SharedPtr ros_node() const
++  {
++    return mujoco_node_;
++  }
++  // The per-step state (time, qpos, qvel, ...) that read() last took from the simulation; valid after the
++  // base read() returns, in the same control cycle.
++  const MujocoSimulation::ControlState& latest_control_state() const
++  {
++    return control_state_;
++  }
+ 
+ private:
+   /**

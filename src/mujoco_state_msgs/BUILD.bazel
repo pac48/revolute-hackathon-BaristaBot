@@ -1,0 +1,30 @@
+# mujoco_state_msgs: the whole MuJoCo state of a simulation (MujocoState: qpos, qvel), which
+# //src/ros2_control_sim/mit_system_interface publishes on every read(), and the service setting it
+# (SetMujocoState). Bindings: :cc / :cc_shared, :py; :ament_package for the processes that use them.
+
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+
+package(default_visibility = ["//visibility:public"])
+
+default_generators(
+    dependencies = ["@std_msgs"],
+    export_name = "mujoco_state_msgs",
+    package_xml = "package.xml",
+    deps = [
+        "//src/mujoco_state_msgs/msg:MujocoState",
+        "//src/mujoco_state_msgs/srv:SetMujocoState",
+    ],
+)
+
+rosidl_ament_package(
+    name = "ament_package",
+    export_name = "mujoco_state_msgs",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

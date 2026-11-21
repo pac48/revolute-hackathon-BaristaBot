@@ -1,0 +1,61 @@
+diff -ruN b/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp b2/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp
+--- b/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:01:12.242993705 -0500
++++ b2/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:35:05.259724028 -0500
+@@ -232,11 +232,20 @@
+       0.0, std::chrono::duration<double>(now - device.last_command_time).count());
+     const double maximum_step = device.velocity_limit * elapsed;
+     const double error = device.target_position - device.sent_position;
++    const double previous_position = device.sent_position;
+     device.sent_position += std::clamp(error, -maximum_step, maximum_step);
+     device.sent_position = std::clamp(device.sent_position, 0.0, 1.0);
+     device.last_command_time = now;
+     motor_protocol_.set_command(
+       device.name, "position", to_motor(device, device.sent_position));
++    // The MIT law is tau = kp (q_des - q) + kd (dq_des - dq) + t_ff. With dq_des = 0 the kd term
++    // brakes the slewed motion (kd * speed, up to the motor's torque limit), capping the speed far
++    // below the slew limit; send the slew's own velocity so kd only damps the deviation from it.
++    const double motor_velocity = elapsed > 1e-4 ?
++      (to_motor(device, device.sent_position) - to_motor(device, previous_position)) / elapsed :
++      0.0;
++    motor_protocol_.set_command(
++      device.name, "velocity", std::isfinite(motor_velocity) ? motor_velocity : 0.0);
+   }
+   motor_protocol_.command_frames(output);
+ }
+diff -ruN b/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp b2/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp
+--- b/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:01:41.725285503 -0500
++++ b2/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:35:05.259724028 -0500
+@@ -193,3 +193,33 @@
+   EXPECT_LT(motor_target, 5.0);  // closing: toward the closed position, at ~0.5 stroke/s
+   EXPECT_GT(motor_target, 4.85);
+ }
++
++namespace
++{
++float command_velocity(const codec::Frame & command)
++{
++  auto frame = command;
++  frame.arbitration_id = codec::build_extended_id(
++    codec::CommunicationType::kOperationStatus, 7, 0xFD);
++  const auto decoded = codec::decode_status(frame, codec::limits_for_model("rs-00"));
++  EXPECT_TRUE(decoded.has_value());
++  return decoded ? decoded->velocity : 0.0F;
++}
++}  // namespace
++
++TEST(RebotGripperProtocol, SlewSendsItsVelocityAsFeedforward)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {metric_gripper_configuration()});
++  ASSERT_TRUE(protocol.process_frame(status(5.0F), std::chrono::steady_clock::now()));  // open
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.025));  // 0.5 stroke/s
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));    // close
++
++  std::vector<shared_can_interface::v1::CanFrame> commands;
++  protocol.command_frames(commands);
++  std::this_thread::sleep_for(std::chrono::milliseconds(20));
++  protocol.command_frames(commands);
++  ASSERT_EQ(commands.size(), 1U);
++  // Closing at half the stroke per second = 2.5 rad/s of the 5 rad span, toward the closed position.
++  EXPECT_NEAR(command_velocity(commands.front()), -2.5, 0.1);
++}

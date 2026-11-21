@@ -1,0 +1,20 @@
+# @fqms: Fast-Quadric-Mesh-Simplification
+# (https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification); foam's `simplify`.
+# License: MIT
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "simplify",
+    srcs = [
+        "src.cmd/Main.cpp",
+        "src.cmd/Simplify.h",
+    ],
+    copts = [
+        "-w",
+        "-O3",  # spherization is slow; optimize even in fastbuild
+    ],
+    linkopts = ["-lpthread"],
+)

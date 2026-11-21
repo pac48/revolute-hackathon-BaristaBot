@@ -1,0 +1,261 @@
+diff -ruN a/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp b/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp
+--- a/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-16 21:01:12.224992916 -0500
++++ b/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-16 21:01:12.242993705 -0500
+@@ -12,9 +12,15 @@
+ namespace rebot_robstride_protocol
+ {
+ 
+-// Adapts the official RS00 gripper motor to a normalized logical joint:
+-// 0.0 is fully open and 1.0 is fully closed. The underlying RobStride
+-// protocol remains responsible for MIT encoding, safe startup and feedback.
++// Adapts the official RS00 gripper motor to a logical gripper joint. By
++// default it is normalized: 0.0 is fully open and 1.0 is fully closed.
++// With the `stroke` device parameter (m, the finger travel from closed to
++// open) the joint is in SI units instead, as the gripper's prismatic finger
++// joint: position in m (0 closed, stroke open), velocity in m/s, and the
++// effort state in N (the motor torque through the ideal, lossless
++// transmission). The velocity command limits the speed in m/s then too.
++// The underlying RobStride protocol remains responsible for MIT encoding,
++// safe startup and feedback.
+ class RebotGripperProtocol final
+   : public shared_can_interface::v1::ProtocolInterface,
+     public shared_can_interface::v1::EnableReadinessInterface
+@@ -58,6 +64,8 @@
+     double open_position{0.0};
+     double closed_position{0.0};
+     double default_velocity{0.25};
++    // Finger travel in m, or 0 for the normalized joint.
++    double stroke{0.0};
+     double target_position{std::numeric_limits<double>::quiet_NaN()};
+     double sent_position{std::numeric_limits<double>::quiet_NaN()};
+     double velocity_limit{0.25};
+@@ -68,6 +76,11 @@
+   const Device * find(const std::string & name) const;
+   double to_normalized(const Device & device, double motor_position) const;
+   double to_motor(const Device & device, double normalized_position) const;
++  // The joint's position/velocity unit per normalized (closure) unit: 1 normalized, -stroke in m
++  // (the joint's position grows as the gripper opens).
++  static double unit_scale(const Device & device);
++  double joint_position(const Device & device, double closure) const;
++  double joint_limit(const Device & device) const;
+ 
+   RobStrideProtocol motor_protocol_;
+   std::vector<Device> devices_;
+diff -ruN a/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp b/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp
+--- a/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:01:12.224992916 -0500
++++ b/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:01:12.242993705 -0500
+@@ -76,8 +76,14 @@
+       std::stod(required_parameter(configuration.parameters, "open_position"));
+     device.closed_position =
+       std::stod(required_parameter(configuration.parameters, "closed_position"));
+-    device.default_velocity =
+-      optional_parameter(configuration.parameters, "default_velocity", 0.25);
++    device.stroke = optional_parameter(configuration.parameters, "stroke", 0.0);
++    if (!std::isfinite(device.stroke) || device.stroke < 0.0) {
++      throw std::invalid_argument(configuration.name + " stroke must be finite and >= 0");
++    }
++    // The default speed is 25% of the travel per second.
++    device.default_velocity = optional_parameter(
++      configuration.parameters, "default_velocity",
++      device.stroke > 0.0 ? 0.25 * device.stroke : 0.25);
+     if (!std::isfinite(device.open_position) || !std::isfinite(device.closed_position) ||
+       std::abs(device.open_position - device.closed_position) < 1e-9)
+     {
+@@ -85,9 +91,11 @@
+               configuration.name + " open_position and closed_position must be finite and distinct");
+     }
+     if (!std::isfinite(device.default_velocity) || device.default_velocity < 0.0 ||
+-      device.default_velocity > 1.0)
++      device.default_velocity > joint_limit(device))
+     {
+-      throw std::invalid_argument(configuration.name + " default_velocity must be within [0, 1]");
++      throw std::invalid_argument(
++              configuration.name + " default_velocity must be within [0, " +
++              std::to_string(joint_limit(device)) + "]");
+     }
+     const auto limits = codec::limits_for_model(
+       required_parameter(configuration.parameters, "model"));
+@@ -96,7 +104,7 @@
+     {
+       throw std::invalid_argument(configuration.name + " gripper endpoint exceeds motor limits");
+     }
+-    device.velocity_limit = device.default_velocity;
++    device.velocity_limit = device.default_velocity / std::abs(unit_scale(device));
+     devices_.push_back(device);
+ 
+     auto motor_configuration = configuration;
+@@ -113,7 +121,7 @@
+   for (auto & device : devices_) {
+     device.target_position = std::numeric_limits<double>::quiet_NaN();
+     device.sent_position = std::numeric_limits<double>::quiet_NaN();
+-    device.velocity_limit = device.default_velocity;
++    device.velocity_limit = device.default_velocity / std::abs(unit_scale(device));
+     device.last_command_time = {};
+   }
+ }
+@@ -182,17 +190,18 @@
+     return false;
+   }
+   if (interface_name == "position") {
+-    if (value < 0.0 || value > 1.0) {
++    if (value < 0.0 || value > joint_limit(*device)) {
+       return false;
+     }
+-    device->target_position = value;
++    // Normalized: the closure itself. In m: 0 closed .. stroke open.
++    device->target_position = device->stroke > 0.0 ? 1.0 - value / device->stroke : value;
+     return true;
+   }
+   if (interface_name == "velocity") {
+-    if (value < 0.0 || value > 1.0) {
++    if (value < 0.0 || value > joint_limit(*device)) {
+       return false;
+     }
+-    device->velocity_limit = value;
++    device->velocity_limit = value / std::abs(unit_scale(*device));
+     return true;
+   }
+   return false;
+@@ -244,7 +253,7 @@
+     if (!motor_protocol_.get_state(device_name, interface_name, motor_position)) {
+       return false;
+     }
+-    value = to_normalized(*device, motor_position);
++    value = joint_position(*device, to_normalized(*device, motor_position));
+     return true;
+   }
+   if (interface_name == "velocity") {
+@@ -252,7 +261,17 @@
+     if (!motor_protocol_.get_state(device_name, interface_name, motor_velocity)) {
+       return false;
+     }
+-    value = -motor_velocity / (device->open_position - device->closed_position);
++    // The closure's rate, in the joint's unit (m/s: positive as the gripper opens).
++    value = unit_scale(*device) * -motor_velocity / (device->open_position - device->closed_position);
++    return std::isfinite(value);
++  }
++  if (interface_name == "effort" && device->stroke > 0.0) {
++    double motor_torque = 0.0;
++    if (!motor_protocol_.get_state(device_name, interface_name, motor_torque)) {
++      return false;
++    }
++    // Ideal transmission: force * dx = torque * dtheta, over the whole travel.
++    value = motor_torque * (device->open_position - device->closed_position) / device->stroke;
+     return std::isfinite(value);
+   }
+   return motor_protocol_.get_state(device_name, interface_name, value);
+@@ -270,11 +289,11 @@
+     if (!motor_protocol_.get_initial_command(device_name, interface_name, motor_position)) {
+       return false;
+     }
+-    value = to_normalized(*device, motor_position);
++    value = joint_position(*device, to_normalized(*device, motor_position));
+     return true;
+   }
+   if (interface_name == "velocity") {
+-    value = device->velocity_limit;
++    value = device->velocity_limit * std::abs(unit_scale(*device));
+     return true;
+   }
+   return false;
+@@ -302,6 +321,22 @@
+   return item == devices_.end() ? nullptr : &*item;
+ }
+ 
++double RebotGripperProtocol::unit_scale(const Device & device)
++{
++  return device.stroke > 0.0 ? -device.stroke : 1.0;
++}
++
++double RebotGripperProtocol::joint_position(const Device & device, double closure) const
++{
++  return device.stroke > 0.0 ? device.stroke * (1.0 - closure) : closure;
++}
++
++// The largest position and velocity (per second) of the joint: 1, or the stroke in m.
++double RebotGripperProtocol::joint_limit(const Device & device) const
++{
++  return device.stroke > 0.0 ? device.stroke : 1.0;
++}
++
+ double RebotGripperProtocol::to_normalized(
+   const Device & device, double motor_position) const
+ {
+diff -ruN a/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp b/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp
+--- a/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:01:12.225992960 -0500
++++ b/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:01:41.725285503 -0500
+@@ -122,3 +122,74 @@
+   EXPECT_FALSE(protocol.set_command("gripper_command_joint", "velocity", 1.1));
+   EXPECT_FALSE(protocol.set_command("gripper_command_joint", "effort", 0.5));
+ }
++
++namespace
++{
++shared_can_interface::v1::DeviceConfiguration metric_gripper_configuration()
++{
++  auto device = gripper_configuration();
++  device.parameters["stroke"] = "0.05";
++  device.parameters.erase("default_velocity");
++  return device;
++}
++}  // namespace
++
++TEST(RebotGripperProtocol, StrokeGivesPositionInMetersClosedAtZero)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {metric_gripper_configuration()});
++
++  double value = -1.0;
++  ASSERT_TRUE(protocol.process_frame(status(5.0F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.get_state("gripper_command_joint", "position", value));
++  EXPECT_NEAR(value, 0.05, 1e-5);  // open
++  ASSERT_TRUE(protocol.process_frame(status(2.5F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.get_state("gripper_command_joint", "position", value));
++  EXPECT_NEAR(value, 0.025, 1e-5);
++  ASSERT_TRUE(protocol.process_frame(status(0.0F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.get_state("gripper_command_joint", "position", value));
++  EXPECT_NEAR(value, 0.0, 1e-5);  // closed
++}
++
++TEST(RebotGripperProtocol, StrokeVelocityAndEffortAreSi)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {metric_gripper_configuration()});
++  // Opening at 1 rad/s of the motor (span 5 rad = 0.05 m) is 0.01 m/s.
++  ASSERT_TRUE(protocol.process_frame(status(2.5F, 1.0F), std::chrono::steady_clock::now()));
++  double value = 0.0;
++  ASSERT_TRUE(protocol.get_state("gripper_command_joint", "velocity", value));
++  EXPECT_NEAR(value, 0.01, 1e-3);
++  // Default speed: a quarter of the stroke per second.
++  const auto now = std::chrono::steady_clock::now();
++  ASSERT_TRUE(protocol.process_frame(parameter_reply(0x7019, 2.5F), now));
++  ASSERT_TRUE(protocol.process_frame(parameter_reply(0x7005, 0.0F), now));
++  ASSERT_TRUE(protocol.process_frame(parameter_reply(0x701A, 0.0F), now));
++  ASSERT_TRUE(protocol.get_initial_command("gripper_command_joint", "velocity", value));
++  EXPECT_NEAR(value, 0.0125, 1e-9);
++  ASSERT_TRUE(protocol.get_initial_command("gripper_command_joint", "position", value));
++  EXPECT_NEAR(value, 0.025, 1e-5);
++}
++
++TEST(RebotGripperProtocol, StrokeCommandsAreInMetersAndSlewedInMetersPerSecond)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {metric_gripper_configuration()});
++  ASSERT_TRUE(protocol.process_frame(status(5.0F), std::chrono::steady_clock::now()));  // open
++  EXPECT_FALSE(protocol.set_command("gripper_command_joint", "position", 0.06));
++  EXPECT_FALSE(protocol.set_command("gripper_command_joint", "position", -0.01));
++  EXPECT_FALSE(protocol.set_command("gripper_command_joint", "velocity", 0.06));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.025));  // half the stroke per s
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));    // close
++
++  std::vector<shared_can_interface::v1::CanFrame> commands;
++  protocol.command_frames(commands);
++  ASSERT_EQ(commands.size(), 1U);
++  EXPECT_NEAR(command_position(commands.front()), 5.0, 4e-4);
++  std::this_thread::sleep_for(std::chrono::milliseconds(20));
++  protocol.command_frames(commands);
++  ASSERT_EQ(commands.size(), 1U);
++  const double motor_target = command_position(commands.front());
++  EXPECT_LT(motor_target, 5.0);  // closing: toward the closed position, at ~0.5 stroke/s
++  EXPECT_GT(motor_target, 4.85);
++}

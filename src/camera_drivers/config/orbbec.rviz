@@ -1,0 +1,119 @@
+# RViz for the Orbbec Gemini 305 (orbbec_camera with camera_name "camera"):
+# the camera model (/camera/robot_description), color (JPEG, <topic>/compressed) and depth images, the depth point cloud and the camera TF frames. The
+# left/right color displays show the dual-color preset (orbbec_camera --dual-color).
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: Camera model
+      Description Source: Topic
+      Description Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /camera/robot_description
+      Visual Enabled: true
+      Collision Enabled: false
+      Alpha: 1
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Names: false
+      Marker Scale: 0.2
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Color
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/color/image_raw/compressed
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Depth
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/depth/image_raw
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Left color
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/left_color/image_raw/compressed
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Right color
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/right_color/image_raw/compressed
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: Point cloud
+      Color Transformer: AxisColor
+      Axis: Z
+      Size (m): 0.005
+      Style: Points
+      Decay Time: 0
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /camera/depth/points
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: camera_link
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 2
+      Focal Point:
+        X: 1
+        Y: 0
+        Z: 0
+      Pitch: 0.4
+      Yaw: 3.14
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Width: 1400

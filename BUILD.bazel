@@ -1,0 +1,2 @@
+# The active robot model (see //src/robot_model/active_model).
+exports_files(["active_model.txt"])

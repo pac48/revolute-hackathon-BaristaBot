@@ -1,0 +1,10 @@
+load("@rosidl_default_generators//:defs.bzl", "ros_message")
+
+package(default_visibility = ["//visibility:public"])
+
+ros_message(
+    name = "MujocoState",
+    src = "MujocoState.msg",
+    package = "mujoco_state_msgs",
+    deps = ["@std_msgs//msg:Header"],
+)

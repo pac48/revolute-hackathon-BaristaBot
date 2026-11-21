@@ -1,0 +1,39 @@
+# mjcf_to_urdf: generate a URDF from an MJCF so the MJCF is the single source
+# of truth for a robot model. See mjcf_to_urdf.cpp for the mapping.
+#
+#   genrule(
+#       name = "urdf_gen",
+#       srcs = ["scene.xml"],
+#       outs = ["robot.urdf"],
+#       cmd = "$(execpath //src/robot_model/mjcf_to_urdf) $< $@",
+#       tools = ["//src/robot_model/mjcf_to_urdf"],
+#   )
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+
+cc_binary(
+    name = "mjcf_to_urdf",
+    srcs = ["mjcf_to_urdf.cpp"],
+    visibility = ["//src:__subpackages__"],
+    deps = ["@rosdistro//cc:mujoco_library"],
+)
+
+# --mesh-prefix places every visual mesh of the reBot RS MJCF where MuJoCo has it.
+cc_test(
+    name = "mesh_visual_test",
+    size = "small",
+    srcs = ["mesh_visual_test.cpp"],
+    args = [
+        "$(rlocationpath :mjcf_to_urdf)",
+        "$(rlocationpath //src/robot_model/rebot_arm_data:rs_arm_mjcf)",
+    ],
+    data = [
+        ":mjcf_to_urdf",
+        "//src/robot_model/rebot_arm_data:rs_arm_mjcf",
+    ],
+    deps = [
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mujoco_library",
+        "@rules_cc//cc/runfiles",
+    ],
+)

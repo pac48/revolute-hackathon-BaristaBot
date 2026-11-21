@@ -1,0 +1,153 @@
+joint_impedance_controller:
+  joints: {
+    type: string_array,
+    default_value: [],
+    description: "Joints to control, in the order of the controller's state and command. Each needs an effort command interface (or, in mit_joints, the MIT ones) and position and velocity state interfaces.",
+    read_only: true,
+    validation: {
+      unique<>: null,
+      size_gt<>: [0],
+    }
+  }
+  mit_joints: {
+    type: string_array,
+    default_value: [],
+    description: "Joints commanded in MIT mode, like the reBot Arm RS's motors: the controller writes their position, velocity, kp, kd and t_ff command interfaces (the hardware computes tau = kp (position - q) + kd (velocity - dq) + t_ff) instead of an effort. They must be in joints. The other joints get an effort command interface.",
+    read_only: true,
+  }
+  position_joints: {
+    type: string_array,
+    default_value: [],
+    description: "Joints commanded by position only, like the real reBot gripper: the controller writes the trajectory's position to their position command interface, and gains.<joint>.velocity_limit (if > 0) to their velocity interface, which that gripper takes as a speed limit. No effort, feedback gains or model terms. They must be in joints and not in mit_joints.",
+    read_only: true,
+  }
+  gravity: {
+    type: double_array,
+    default_value: [0.0, 0.0, -9.81],
+    description: "Gravity vector (m/s^2) in the root frame of the robot description.",
+    read_only: true,
+    validation: {
+      fixed_size<>: [3],
+    }
+  }
+  allow_partial_joints_goal: {
+    type: bool,
+    default_value: false,
+    description: "Accept trajectories (messages and goals) for a subset of the joints; the others keep following the targets they had.",
+  }
+  trajectory:
+    position_weight: {
+      type: double,
+      default_value: 1.0,
+      description: "Fit cost of each trajectory point's squared position error (rad^2). Only the ratios of the three weights matter.",
+      validation: {
+        gt<>: [0.0],
+      }
+    }
+    velocity_weight: {
+      type: double,
+      default_value: 0.0,
+      description: "Fit cost of the integral of the squared velocity. Pulls the trajectory toward rest (it lags the points); velocity_weight or acceleration_weight must be > 0.",
+      validation: {
+        gt_eq<>: [0.0],
+      }
+    }
+    acceleration_weight: {
+      type: double,
+      default_value: 1.0e-4,
+      description: "Fit cost of the integral of the squared acceleration. Larger smooths more and follows the points less: with points every h seconds, the fit passes frequencies below about (position_weight / (h * acceleration_weight))^(1/4) rad/s (~47 rad/s, 7.5 Hz, for 20 ms points at the defaults).",
+      validation: {
+        gt_eq<>: [0.0],
+      }
+    }
+    capacity: {
+      type: int,
+      default_value: 10000,
+      description: "The most pending points per joint (memory is allocated for them at configure); longer trajectories are cut there (with an error). A trajectory of N points takes O(N) time to fit, once, in the control loop.",
+      read_only: true,
+      validation: {
+        gt<>: [0],
+      }
+    }
+    stop_duration: {
+      type: double,
+      default_value: 0.1,
+      description: "Cancelling a goal replaces the trajectory by coming to rest, in this time (s), at the desired position when it was cancelled.",
+      validation: {
+        gt<>: [0.0],
+      }
+    }
+    latency: {
+      type: double,
+      default_value: 0.05,
+      description: "Delay (s) added to every point's time. Streamed trajectories then overlap: the points of the last `latency` seconds of messages are still ahead when a new one arrives, and the fit smooths over all of them (at the cost of that much lag).",
+      validation: {
+        gt_eq<>: [0.0],
+      }
+    }
+    position_limits: {
+      type: bool,
+      default_value: true,
+      description: "Keep the trajectory within the robot description's joint position limits (shrunk by position_limit_margin): points are clamped into them, and the fit is a QP with the limits as inequality constraints. Continuous joints have none.",
+      read_only: true,
+    }
+    position_limit_margin: {
+      type: double,
+      default_value: 0.0,
+      description: "How far (rad or m) inside the robot description's limits the trajectory stays.",
+      read_only: true,
+      validation: {
+        gt_eq<>: [0.0],
+      }
+    }
+  state_publish_rate: {
+    type: double,
+    default_value: 50.0,
+    description: "Rate (Hz) of ~/controller_state; 0 turns it off.",
+    validation: {
+      gt_eq<>: [0.0],
+    }
+  }
+  feedforward: {
+    inertia: {
+      type: bool,
+      default_value: true,
+      description: "Add M(q) * qdd_d to the effort, with q the measured position and qdd_d the trajectory's acceleration.",
+    },
+    coriolis: {
+      type: bool,
+      default_value: true,
+      description: "Add C(q, qd) * qd to the effort, with the measured position and velocity.",
+    },
+    gravity: {
+      type: bool,
+      default_value: true,
+      description: "Add g(q) to the effort, with the measured position.",
+    },
+  }
+  gains:
+    __map_joints:
+      stiffness: {
+        type: double,
+        default_value: 0.0,
+        description: "Position feedback gain Kp (N*m/rad on the position error q_d - q).",
+        validation: {
+          gt_eq<>: [0.0],
+        }
+      }
+      damping: {
+        type: double,
+        default_value: 0.0,
+        description: "Velocity feedback gain Kd (N*m*s/rad on the velocity error qd_d - qd).",
+        validation: {
+          gt_eq<>: [0.0],
+        }
+      }
+      velocity_limit: {
+        type: double,
+        default_value: 0.0,
+        description: "For a position_joints joint: the speed limit (m/s for the gripper) written to its velocity command interface; 0 leaves that interface unclaimed.",
+        validation: {
+          gt_eq<>: [0.0],
+        }
+      }

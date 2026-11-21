@@ -1,0 +1,37 @@
+# The simulated Gemini 305 color cameras of both arms (each arm's MJCF cameras left_color and right_color, named
+# left_left_color, left_right_color, right_left_color and right_right_color), rendered and published by mujoco_ros2_control_plugins'
+# CameraPlugin. Loaded in addition to controllers.yaml. Topics are the real drivers' (two
+# //src/camera_drivers:orbbec_camera instances named left_camera and right_camera).
+mujoco_ros2_control_node:
+  ros__parameters:
+    mujoco_plugins:
+      mujoco_camera_plugin:
+        type: mujoco_ros2_control_plugins/CameraPlugin
+        camera_publish_rate: 30.0
+        left_left_color:
+          frame_name: left_camera_left_color_optical_frame
+          info_topic: /left_camera/left_color/camera_info
+          image_topic: /left_camera/left_color/image_raw
+          depth_topic: /left_camera/left_color/depth/image_raw
+        right_left_color:
+          frame_name: right_camera_left_color_optical_frame
+          info_topic: /right_camera/left_color/camera_info
+          image_topic: /right_camera/left_color/image_raw
+          depth_topic: /right_camera/left_color/depth/image_raw
+        left_right_color:
+          frame_name: left_camera_right_color_optical_frame
+          info_topic: /left_camera/right_color/camera_info
+          image_topic: /left_camera/right_color/image_raw
+          depth_topic: /left_camera/right_color/depth/image_raw
+        right_right_color:
+          frame_name: right_camera_right_color_optical_frame
+          info_topic: /right_camera/right_color/camera_info
+          image_topic: /right_camera/right_color/image_raw
+          depth_topic: /right_camera/right_color/depth/image_raw
+        # The scene camera (MJCF scene_color; a USB camera on the real setup, which has no depth: the
+        # plugin renders and publishes one anyway).
+        scene_color:
+          frame_name: scene_camera_optical_frame
+          info_topic: /scene_camera/camera_info
+          image_topic: /scene_camera/image_raw
+          depth_topic: /scene_camera/depth/image_raw

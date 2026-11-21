@@ -1,0 +1,28 @@
+# Headset tools for the Quest teleop app.
+#   bazel run //src/teleop/quest_app:launch [-- --stop]   (alias of :launch here)
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+# adb from the hermetic Android SDK (MODULE.bazel).
+py_data_library(
+    name = "adb_tool",
+    src = "@androidsdk//:platform-tools/adb",
+)
+
+py_data_library(
+    name = "quest_teleop_apk",
+    src = "//src/teleop/quest_app/app:quest_teleop.apk",
+)
+
+py_binary(
+    name = "launch",
+    srcs = ["launch.py"],
+    visibility = ["//src/teleop/quest_app:__pkg__"],
+    deps = [
+        ":adb_tool",
+        ":quest_teleop_apk",
+    ],
+)
+
+exports_files(["setup_udev.sh"])

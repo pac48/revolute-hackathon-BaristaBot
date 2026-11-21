@@ -1,0 +1,10 @@
+<mujoco>
+  <!-- Included by rs_arm.xml inside its wrist_camera_optical_frame (the D405's color optical
+       frame in the reBot-DevArm). The inner frame places the Gemini's camera_bottom_screw so that
+       its left color optical frame (camera_link at 0.0081267 0.009 0.021, then the optical
+       rotation) is the outer frame: the inverse of that transform. Frame names stay the driver's
+       (camera_link, camera_left_color_optical_frame, ...), so the prefix is empty. -->
+  <frame pos="0.009 0.021 -0.00812670338835" quat="0.5 0.5 -0.5 0.5">
+    <attach model="gemini_305" body="camera_bottom_screw" prefix=""/>
+  </frame>
+</mujoco>

@@ -1,0 +1,279 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# Simplified stand-in for the reBot Arm B601-RS: one Xform per MJCF body
+# (rs_arm.xml), named after it, holding the body's world pose at the default
+# configuration, with a box over each of the body's visual meshes (kept out of the wrist camera's
+# view). Replace the boxes with the real
+# assets; keep the body Xform names (rebot_arm_usd_test checks them against the MJCF).
+
+def Xform "World"
+{
+    def Xform "base_link"
+    {
+        matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (2.48599e-11, -2.09853e-10, 0.0375)
+            float3 xformOp:scale = (0.14, 0.2, 0.075)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link1"
+    {
+        matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (-0.0003428, -0.0009868, 0.075, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.00457007, 0.000986832, 0.0434922)
+            float3 xformOp:scale = (0.0864545, 0.0865, 0.107784)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link2"
+    {
+        matrix4d xformOp:transform = ( (1, 0, -0, 0), (-0, -3.67696e-06, -1, 0), (0, 1, -3.67696e-06, 0), (0.0200002, 0.0262502, 0.145, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.116365, -8.27695e-10, -0.02625)
+            float3 xformOp:scale = (0.32653, 0.0881172, 0.0653)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.118, 6.96182e-06, -0.02625)
+            float3 xformOp:scale = (0.302999, 0.0668859, 0.0655)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual2"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.118, -0.0055, -0.02625)
+            float3 xformOp:scale = (0.134, 0.04, 0.0655)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual3"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.118, 0.0021, -0.02625)
+            float3 xformOp:scale = (0.0940078, 0.0288, 0.0655)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link3"
+    {
+        matrix4d xformOp:transform = ( (1, 0, -0, 0), (-0, -3.67696e-06, -1, 0), (0, 1, -3.67696e-06, 0), (-0.216, 0.0262502, 0.145, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.115813, -0.0381231, -0.02625)
+            float3 xformOp:scale = (0.281352, 0.126246, 0.0865)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.228049, -0.0727461, -0.02575)
+            float3 xformOp:scale = (0.0818041, 0.063, 0.0605)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual2"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0801395, -0.0737461, -0.02625)
+            float3 xformOp:scale = (0.209721, 0.04, 0.0635)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual3"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0969079, -0.0707461, -0.02625)
+            float3 xformOp:scale = (0.05125, 0.0145, 0.0655)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual4"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0969079, -0.0707461, -0.02625)
+            float3 xformOp:scale = (0.05095, 0.0142, 0.0638)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual5"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.118, -0.0813461, -0.02625)
+            float3 xformOp:scale = (0.0940078, 0.0288, 0.0655)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link4"
+    {
+        matrix4d xformOp:transform = ( (1, 0, -0, 0), (-0, -3.67696e-06, -1, 0), (0, 1, -3.67696e-06, 0), (0.0120002, 0.0307505, 0.217746, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0870489, -0.0755, -0.03075)
+            float3 xformOp:scale = (0.0818041, 0.055, 0.0627853)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.0458487, -0.0132805, -0.03075)
+            float3 xformOp:scale = (0.148575, 0.083439, 0.0865)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link5"
+    {
+        matrix4d xformOp:transform = ( (1, -0, 0, 0), (0, -1, 7.35391e-06, 0), (-0, -7.35391e-06, -1, 0), (0.0990002, 6.43978e-07, 0.265746, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (0.009, 4.88926e-05, 0.048)
+            float3 xformOp:scale = (0.055, 0.0818041, 0.0627853)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.00695, 1.55977e-11, 0.03715)
+            float3 xformOp:scale = (0.0509, 0.058, 0.0807)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual2"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.0355, -5.93249e-10, 0.074)
+            float3 xformOp:scale = (0.032, 0.038, 0.053)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "link6"
+    {
+        matrix4d xformOp:transform = ( (-3.67696e-06, 7.35391e-06, 1, 0), (4.23516e-22, -1, 7.35391e-06, 0), (1, 2.704e-11, 3.67696e-06, 0), (0.1355, 2.9099e-07, 0.217746, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-9.22688e-10, 5.03388e-10, 0.00425)
+            float3 xformOp:scale = (0.0568, 0.0568, 0.0095)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "gripper_end"
+    {
+        matrix4d xformOp:transform = ( (1, 1.352e-11, -5.63876e-28, 0), (-1.352e-11, 1, -8.34137e-17, 0), (-5.63876e-28, 8.34137e-17, 1, 0), (0.30171, 2.90995e-07, 0.217747, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.0882093, -6.92598e-10, 4.29785e-10)
+            float3 xformOp:scale = (0.03, 0.18407, 0.0680665)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.0886593, -2.08067e-09, -4.70923e-09)
+            float3 xformOp:scale = (0.0291, 0.176285, 0.0684665)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual2"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.124959, 5.16753e-10, -4.88926e-05)
+            float3 xformOp:scale = (0.0645, 0.0627853, 0.0818041)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual3"
+        {
+            double size = 1
+            double3 xformOp:translate = (-0.125773, 0.000405715, 0.0808726)
+            float3 xformOp:scale = (0.0320907, 0.0486069, 0.114643)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "gripper_coupler"
+    {
+        matrix4d xformOp:transform = ( (1, 1.352e-11, -5.63876e-28, 0), (-1.352e-11, 1, -8.34137e-17, 0), (-5.63876e-28, 8.34137e-17, 1, 0), (0.30171, 2.90995e-07, 0.217747, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+    def Xform "gripper_left"
+    {
+        matrix4d xformOp:transform = ( (-3.6e-06, -6.47998e-12, 1, 0), (-1, -3.60001e-06, -3.6e-06, 0), (3.60001e-06, -1, 6.48009e-12, 0), (0.259771, -7.3109e-05, 0.217747, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (2.6439e-10, -0.0026343, 0.0173383)
+            float3 xformOp:scale = (0.0384139, 0.0786093, 0.0346766)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (-6.96449e-06, 0.0347704, -0.013673)
+            float3 xformOp:scale = (0.03844, 0.0238, 0.0899993)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+    def Xform "gripper_right"
+    {
+        matrix4d xformOp:transform = ( (-3.6e-06, 6.47982e-12, 1, 0), (1, -3.59999e-06, 3.6e-06, 0), (3.59999e-06, 1, 6.48015e-12, 0), (0.259771, 7.3691e-05, 0.217747, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            double3 xformOp:translate = (-2.6439e-10, 0.0026343, 0.0173383)
+            float3 xformOp:scale = (0.0384139, 0.0786093, 0.0346766)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+        def Cube "visual1"
+        {
+            double size = 1
+            double3 xformOp:translate = (6.96449e-06, -0.0347704, -0.013673)
+            float3 xformOp:scale = (0.03844, 0.0238, 0.0899993)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.65, 0.68, 0.72)]
+        }
+    }
+}

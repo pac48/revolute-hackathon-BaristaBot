@@ -1,0 +1,7 @@
+<mujoco>
+  <!-- Included inside rs_arm.xml's wrist_camera_optical_frame; nothing is mounted by default.
+       Models composed on the arm provide their own wrist_camera.xml next to their copy of
+       rs_arm.xml (see rebot_arm_gemini_305_data). MuJoCo rejects an empty include, hence the
+       empty frame. -->
+  <frame/>
+</mujoco>
