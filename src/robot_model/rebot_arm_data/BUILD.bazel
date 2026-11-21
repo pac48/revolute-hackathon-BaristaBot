@@ -8,14 +8,11 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
 load("//src/robot_model/robot_model_utils:symlink_tree.bzl", "symlink_tree")
-load("//src/robot_model/robot_model_utils/spherize:spherize.bzl", "sphere_editor", "spherized_robot", "spheres_model")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "rebot_arm_description.BUILD.bazel",
-    # Shared by the models composed on the arm (rebot_arm_gemini_305_data).
-    "rs_spheres.yaml",
     "mjcf/rs_arm.xml",
 ])
 
@@ -161,7 +158,7 @@ py_data_library(
 # The same URDF plus the MJCF's visual meshes, for the ROS robot_description (RViz). Mesh
 # filenames are package://rebot_arm_description/meshes/..., which RViz resolves through
 # @rebot_arm_description//:ament_index (so it can run on another machine than the simulation).
-# Kinematics and VAMP use rs_generated.urdf (no meshes).
+# Kinematics uses rs_generated.urdf (no meshes).
 genrule(
     name = "rs_visual_urdf_gen",
     srcs = [
@@ -177,31 +174,4 @@ genrule(
 py_data_library(
     name = "rs_visual_urdf",
     src = "rs_visual.urdf",
-)
-
-# Collision model for motion planning (VAMP): rs_spheres.yaml (spheres per link,
-# gripper joints fixed) merged into the generated URDF -> rs_vamp.urdf + .srdf.
-# Re-seed the spec (overwrites hand edits):
-#   bazel run //src/robot_model/robot_model_utils/spherize:seed_spheres -- \
-#     --mjcf src/robot_model/rebot_arm_data/mjcf/rs_arm.xml \
-#     --out src/robot_model/rebot_arm_data/rs_spheres.yaml --fix joint7=0 joint_left=0 joint_right=0
-spherized_robot(
-    name = "rs_vamp",
-    spec = "rs_spheres.yaml",
-    urdf = ":rs_generated.urdf",
-    visibility = ["//visibility:public"],
-)
-
-# Edit the spheres in Blender: bazel run :export_spheres, edit rs_spheres.obj, bazel run :import_spheres.
-sphere_editor(
-    mjcf = ":rs_arm_mjcf",
-    specs = ["rs_spheres.yaml"],
-    urdf = ":rs_generated.urdf",
-)
-
-# The model's MJCF with the spheres as its collision geoms, and its viewer: bazel run :view_spheres
-spheres_model(
-    scene = "rs/rs_arm.xml",
-    specs = ["rs_spheres.yaml"],
-    tree = ":rs_tree",
 )

@@ -2,7 +2,7 @@
 //
 // Each robot model package provides a factory (e.g. rebot_arm::make_kinematics()
 // in rebot_arm.hpp) returning a Kinematics for one chain (root link -> tip link)
-// of its MuJoCo model. Like MotionPlanner, states are mjData of that model: the
+// of its MuJoCo model. States are mjData of that model: the
 // chain's joints (joint_names()) are read and written in qpos by name.
 // Poses are of the tip link in the root link's frame.
 //

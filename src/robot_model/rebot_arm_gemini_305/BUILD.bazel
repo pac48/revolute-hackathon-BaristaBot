@@ -1,14 +1,13 @@
 # rebot_arm_gemini_305: functionality for the reBot Arm B601-RS with an Orbbec Gemini 305 on the
-# wrist (C++: load_mujoco_model, make_planner, make_kinematics; Python: description.robot_description
+# wrist (C++: load_mujoco_model, make_kinematics; Python: description.robot_description
 # for ros2_control), built on the model files in ../rebot_arm_gemini_305_data. The arm is the
 # reBot's (../rebot_arm): same joints and actuators (its PIDs are reused here), with the camera in
-# the model and in the planner's collision model.
+# the model.
 
 load("//src/robot_model/robot_model_utils:viewer.bzl", "model_viewer")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 load("//src/robot_model/robot_model_utils:fast_kinematics.bzl", "fast_kinematics")
-load("//third_party/vamp:defs.bzl", "VAMP_COPTS", "vamp_robot")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -16,8 +15,6 @@ cc_library(
     name = "rebot_arm_gemini_305",
     srcs = ["rebot_arm_gemini_305.cpp"],
     hdrs = ["rebot_arm_gemini_305.hpp"],
-    # The .cpp instantiates VampPlanner; the header is VAMP-free.
-    copts = VAMP_COPTS,
     data = [
         "//src/robot_model/rebot_arm_gemini_305_data:files",  # meshes and the camera model, next to scene.xml
         "//src/robot_model/rebot_arm_gemini_305_data:scene.xml",
@@ -27,14 +24,11 @@ cc_library(
     ],
     deps = [
         ":rebot_arm_gemini_305_kinematics",
-        ":rebot_arm_gemini_305_vamp",
         "//src/robot_model/robot_model_utils:kdl_kinematics",
         "//src/robot_model/robot_model_utils:kinematics",
-        "//src/robot_model/robot_model_utils:motion_planner",
         "//src/robot_model/robot_model_utils:mujoco_model",
         "//src/robot_model/robot_model_utils:state_estimator",
         "//src/robot_model/robot_model_utils:renderer_api",
-        "//src/robot_model/robot_model_utils:vamp_planner",
     ],
 )
 
@@ -132,30 +126,6 @@ py_test(
     deps = [
         ":description",
         "@rules_python//python/runfiles",
-    ],
-)
-
-# ---- Motion planning (VAMP) ---------------------------------------------------
-
-# VAMP robot code (vamp::robots::RebotArmGemini305), generated at build time by cricket from this
-# model's spherized URDF: the arm's spheres and the camera's (rebot_arm_gemini_305_data:vamp).
-vamp_robot(
-    name = "rebot_arm_gemini_305_vamp",
-    end_effector = "gripper_end",
-    module = "rebot_arm_gemini_305",
-    srdf = "//src/robot_model/rebot_arm_gemini_305_data:vamp.srdf",
-    struct_name = "RebotArmGemini305",
-    urdf = "//src/robot_model/rebot_arm_gemini_305_data:vamp.urdf",
-    visibility = ["//visibility:private"],
-)
-
-# Planner CLI: JSON request on stdin -> path on stdout (robot_model_utils/planner_cli.hpp).
-cc_binary(
-    name = "plan",
-    srcs = ["plan_main.cpp"],
-    deps = [
-        ":rebot_arm_gemini_305",
-        "//src/robot_model/robot_model_utils:planner_cli",
     ],
 )
 

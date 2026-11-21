@@ -3,13 +3,11 @@
 // The model files live in //src/robot_model/rebot_arm_gemini_305_data (the arm's MJCF with the
 // camera model attached). The arm is the same as //src/robot_model/rebot_arm's: same joints,
 // actuators, chain (base_link -> gripper_end), so its poses are the same. What differs is the
-// model: the camera's bodies and MuJoCo cameras (left_color, right_color), and a
-// collision model (for planning) that includes the camera.
+// model: the camera's bodies and MuJoCo cameras (left_color, right_color).
 
 #pragma once
 
 #include "src/robot_model/robot_model_utils/kinematics.hpp"
-#include "src/robot_model/robot_model_utils/motion_planner.hpp"
 #include "src/robot_model/robot_model_utils/mujoco_model.hpp"
 #include "src/robot_model/robot_model_utils/state_estimator.hpp"
 #include "src/robot_model/robot_model_utils/renderer.hpp"
@@ -29,12 +27,6 @@ std::string mjcf_path();
 // Compiles the MJCF (with its meshes) into a MuJoCo model.
 // Throws std::runtime_error with MuJoCo's message if loading fails.
 MjModelPtr load_mujoco_model();
-
-// Motion planner (VAMP) for joint1..joint6 with the gripper held closed, whose collision
-// model includes the camera (//src/robot_model/rebot_arm_gemini_305_data:vamp). Takes mjData of
-// `model` (from load_mujoco_model(); not owned, must outlive the planner). Obstacles are in
-// the arm's base frame (= MJCF world).
-std::unique_ptr<robot_model::MotionPlanner> make_planner(const mjModel* model);
 
 // Forward/inverse kinematics base_link -> gripper_end (joint1..joint6; fast_robot_kinematics,
 // generated from the composed model's URDF). Not thread-safe: one per thread.

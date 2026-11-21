@@ -1,4 +1,4 @@
-"""Command-line argument parsing shared by move_to, plan_to and move_cartesian."""
+"""Command-line argument parsing shared by move_to and move_cartesian."""
 
 import argparse
 

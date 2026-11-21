@@ -214,102 +214,12 @@ http_archive(
     urls = ["https://github.com/xiayip/rebot_arm_rs_ros2/archive/76dac2016cf3afa887390a393e8b969d20c0af98.tar.gz"],
 )
 
-# VAMP (motion planning, https://github.com/kavrakilab/vamp) and the libraries
-# its CMake build fetches, at the commits it pins. BUILD files in //third_party/vamp.
+# C++ libraries used directly: Eigen (kinematics, teleop), cxxopts (data recorder CLI), nlohmann_json (kinematics CLI).
 bazel_dep(name = "eigen", version = "5.0.1.bcr.1")
-
-# cricket (VAMP robot code generator) dependencies, at the versions already in
-# the module graph; CppAD, CppADCodeGen and CGAL are http_archives below.
-bazel_dep(name = "pinocchio", version = "4.1.0-1.rcr.0")
-bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # CGAL exact arithmetic without GMP
 bazel_dep(name = "cxxopts", version = "3.3.1")
-bazel_dep(name = "fmt", version = "12.2.0.bcr.1.rcr.0")
 bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2")
 
-http_archive(
-    name = "vamp",
-    build_file = "//third_party/vamp:vamp.BUILD.bazel",
-    sha256 = "bb4871eebe6b52a31094124a77606e683e25f6194a84098bcbe27699f4daefbb",
-    strip_prefix = "vamp-27cb9b66ebd8d101ce88d330f3b028398afc1cfa",
-    urls = ["https://github.com/kavrakilab/vamp/archive/27cb9b66ebd8d101ce88d330f3b028398afc1cfa.tar.gz"],
-)
-
-http_archive(
-    name = "nigh",
-    build_file = "//third_party/vamp:nigh.BUILD.bazel",
-    sha256 = "76d9b42da8d14f09d61331d786c1fda5bfd8fe2756cc7144e1c8482c44c7bd41",
-    strip_prefix = "nigh-97130999440647c204e0265d05a997dbd8da4e70",
-    urls = ["https://github.com/kavrakilab/nigh/archive/97130999440647c204e0265d05a997dbd8da4e70.tar.gz"],
-)
-
-http_archive(
-    name = "pdqsort",
-    build_file = "//third_party/vamp:pdqsort.BUILD.bazel",
-    sha256 = "1df2463f94ebd926f402e7bcd92bf4a16f7a35732080a607fe4716888f1edbb5",
-    strip_prefix = "pdqsort-b1ef26a55cdb60d236a5cb199c4234c704f46726",
-    urls = ["https://github.com/orlp/pdqsort/archive/b1ef26a55cdb60d236a5cb199c4234c704f46726.tar.gz"],
-)
-
-http_archive(
-    name = "cddlib",
-    build_file = "//third_party/vamp:cddlib.BUILD.bazel",
-    sha256 = "766d8ec2135989830748e5e2fe57f307ed0706431c135541c3c081cbec0bc34f",
-    strip_prefix = "cddlib-0.94m",
-    urls = ["https://github.com/cddlib/cddlib/archive/refs/tags/0.94m.tar.gz"],
-)
-
-http_archive(
-    name = "simdxorshift",
-    build_file = "//third_party/vamp:simdxorshift.BUILD.bazel",
-    sha256 = "fa1578e3b89383726765807d0751606a442d62b8f2e7c8eb2aacd76d7dbef618",
-    strip_prefix = "SIMDxorshift-857c1a01df53cf1ee1ae8db3238f0ef42ef8e490",
-    urls = ["https://github.com/lemire/SIMDxorshift/archive/857c1a01df53cf1ee1ae8db3238f0ef42ef8e490.tar.gz"],
-)
-
-# cricket (https://github.com/CoMMALab/cricket): generates VAMP robot code from a
-# spherized URDF. BUILD files in //third_party/cricket.
-http_archive(
-    name = "cricket",
-    build_file = "//third_party/cricket:cricket.BUILD.bazel",
-    sha256 = "f1d16cfa759060a0f4f24189f23ac1ac29e906cad62df73e2d784df151ca689c",
-    strip_prefix = "cricket-39662805f8d1a1f961e2767061f470ff56efe7a8",
-    urls = ["https://github.com/CoMMALab/cricket/archive/39662805f8d1a1f961e2767061f470ff56efe7a8.tar.gz"],
-)
-
-http_archive(
-    name = "cppad",
-    build_file = "//third_party/cricket:cppad.BUILD.bazel",
-    sha256 = "a3a4030ae49719e88e5057e923c4c97c5ba8910e22471f22661420ce65747fbe",
-    strip_prefix = "CppAD-20250000.3",
-    urls = ["https://github.com/coin-or/CppAD/archive/refs/tags/20250000.3.tar.gz"],
-)
-
-http_archive(
-    name = "cppadcg",
-    build_file = "//third_party/cricket:cppadcg.BUILD.bazel",
-    sha256 = "a53d3e91cfa17381f31819d549de71767b90d05e671fa848043694b0f53d6c18",
-    strip_prefix = "CppADCodeGen-2.5.0",
-    urls = ["https://github.com/joaoleal/CppADCodeGen/archive/refs/tags/v2.5.0.tar.gz"],
-)
-
-http_archive(
-    name = "cgal",
-    build_file = "//third_party/cricket:cgal.BUILD.bazel",
-    sha256 = "8e7ce1e30e8ffcb3e69d153c3a561bb1f38bbb4becd8e6544cbaa0fb2889af62",
-    strip_prefix = "CGAL-6.2.1",
-    urls = ["https://github.com/CGAL/cgal/releases/download/v6.2.1/CGAL-6.2.1-library.tar.xz"],
-)
-
-# foam (https://github.com/CoMMALab/foam): spherization of robot meshes, used to
-# seed VAMP sphere specs. BUILD files in //third_party/foam; Python deps are the
-# @pip_foam hub (//third_party/foam:requirements_lock.txt).
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
-pip.parse(
-    hub_name = "pip_foam",
-    python_version = "3.12",
-    requirements_lock = "//third_party/foam:requirements_lock.txt",
-)
-use_repo(pip, "pip_foam")
 
 # @pip_ros2_tools hub (//tools/ros2:requirements_lock.txt): a newer argcomplete for ros2's completion.
 pip.parse(
@@ -378,52 +288,6 @@ http_archive(
     sha256 = "7473a79763af4f8fe8dc70cbd4d99468d822a8f96a0c58891c25801390958f0a",
     type = "zip",
     urls = ["https://pypi.nvidia.com/ovstage/ovstage-0.4.0.1794520352-py3-none-manylinux_2_35_x86_64.whl"],
-)
-
-http_archive(
-    name = "foam",
-    build_file = "//third_party/foam:foam.BUILD.bazel",
-    patch_args = ["-p1"],
-    patches = [
-        "//third_party/foam:binary_paths.patch",
-        "//third_party/foam:spheretree_minmax.patch",
-    ],
-    sha256 = "48043cb252ed1660cae87430d3743bd3735ef7a30d028b2d242c1ea864762174",
-    strip_prefix = "foam-116928f71aaa7c40356d79c84d3c9ff1f4497d90",
-    urls = ["https://github.com/CoMMALab/foam/archive/116928f71aaa7c40356d79c84d3c9ff1f4497d90.tar.gz"],
-)
-
-# foam's git submodules, at the commits it pins (libigl: ManifoldPlus's submodule).
-http_archive(
-    name = "manifoldplus",
-    build_file = "//third_party/foam:manifoldplus.BUILD.bazel",
-    sha256 = "ff86df4e97888d131c72cfc8b79045a442a9d8340d082dcc2d20050dd696b961",
-    strip_prefix = "ManifoldPlus-a0cc6d9817f81efff63b704a2fed53567ea44cbd",
-    urls = ["https://github.com/hjwdzh/ManifoldPlus/archive/a0cc6d9817f81efff63b704a2fed53567ea44cbd.tar.gz"],
-)
-
-http_archive(
-    name = "manifold_old",
-    build_file = "//third_party/foam:manifold_old.BUILD.bazel",
-    sha256 = "6e490a753b20ce49e53a92ea1f153cc2ffb4dbc10eb09143fce88c4820bb85f0",
-    strip_prefix = "Manifold-81fd342e578e29fc15fb75d2b4d1e3c821fe33cb",
-    urls = ["https://github.com/hjwdzh/Manifold/archive/81fd342e578e29fc15fb75d2b4d1e3c821fe33cb.tar.gz"],
-)
-
-http_archive(
-    name = "fqms",
-    build_file = "//third_party/foam:fqms.BUILD.bazel",
-    sha256 = "fd8bf55a675f2d162b2fcc1ed05a59b7fc22f8391afe6727bd00d21e41d658cf",
-    strip_prefix = "Fast-Quadric-Mesh-Simplification-2927c8209be291088b939cd934f1b69844922f26",
-    urls = ["https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification/archive/2927c8209be291088b939cd934f1b69844922f26.tar.gz"],
-)
-
-http_archive(
-    name = "libigl",
-    build_file = "//third_party/foam:libigl.BUILD.bazel",
-    sha256 = "3fb3ae1051a3f32614d7bda6afcf9b20db0fa4340439012f3200d864604de299",
-    strip_prefix = "libigl-d402d9495995d6324085a1ec5934961f7211ba12",
-    urls = ["https://github.com/libigl/libigl/archive/d402d9495995d6324085a1ec5934961f7211ba12.tar.gz"],
 )
 
 # ---- Android (Quest teleop app, //src/teleop/quest_app/app) ----------------------------

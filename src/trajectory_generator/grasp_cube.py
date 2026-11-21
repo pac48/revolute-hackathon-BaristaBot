@@ -6,7 +6,7 @@ Usage: bazel run //src/trajectory_generator:grasp_cube -- [--model rebot_arm_gem
 
 Needs the simulation running (`bazel run //src/ros2_control_sim:mujoco_arm_sim -- --model rebot_arm_gemini_305`):
 the cube's pose is read from /mujoco_state (the sim's whole MuJoCo state) and set with /set_mujoco_state.
-Every episode plans (collision-free, the model's motion planner) back to the home pose, then puts the cube at
+Every episode moves (a straight joint-space move) back to the home pose, then puts the cube at
 a random pose in front of the robot
 (--x, --y, any yaw) that the tool can reach above and at (IK; else another sample), opens the gripper,
 comes above the cube and down to it on straight lines (TrajectoryClient.move_cartesian: dense IK), the
@@ -34,7 +34,6 @@ from src.trajectory_generator import grasp_state_machine as gsm
 from src.trajectory_generator import kinematics_client
 from src.trajectory_generator.client import TrajectoryClient, TrajectoryError
 from src.trajectory_generator.kinematics_client import KinematicsError
-from src.trajectory_generator.planner_client import PlanningError
 
 MODELS = {"rebot_arm_gemini_305": gemini_mjcf}  # the models with the cube in their scene
 # The home pose: the wrist bent, the tool at (0.40, 0, 0.34) m, clear of the table (as cartesian_demo).
@@ -83,7 +82,8 @@ class RosArm:
         return None
 
     def go_home(self) -> None:
-        self.client.plan_to(self.model, HOME, max_velocity=self.args.max_joint_velocity)
+        # A straight joint-space move (there is no motion planner): nothing checks it for collisions on the way.
+        self.client.move_to(HOME, max_velocity=self.args.max_joint_velocity)
         self.client.wait_until_at(HOME, 0.02, 2.0)
 
     def cube_pose(self):
@@ -189,7 +189,7 @@ def main(argv=None) -> int:
         state = machine.run()
         node.get_logger().info(f"{state.value}: {machine.successes} of {machine.episodes_done} episodes lifted the cube")
         return 0 if state is gsm.State.DONE else 1
-    except (TrajectoryError, KinematicsError, PlanningError) as e:
+    except (TrajectoryError, KinematicsError) as e:
         node.get_logger().error(f"{e}")
         return 1
     except KeyboardInterrupt:

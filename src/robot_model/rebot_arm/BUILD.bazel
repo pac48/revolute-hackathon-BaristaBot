@@ -1,5 +1,5 @@
 # rebot_arm: functionality for the reBot Arm B601 robot model (C++: load_mujoco_model,
-# make_planner, make_kinematics; Python: description.robot_description for ros2_control), built on the
+# make_kinematics; Python: description.robot_description for ros2_control), built on the
 # model files in ../rebot_arm_data (fetched from Seeed-Projects/reBot-DevArm).
 
 load("//src/robot_model/robot_model_utils:viewer.bzl", "model_viewer")
@@ -7,7 +7,6 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 load("//src/robot_model/robot_model_utils:fast_kinematics.bzl", "fast_kinematics")
 load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
-load("//third_party/vamp:defs.bzl", "VAMP_COPTS", "vamp_robot")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,22 +14,17 @@ cc_library(
     name = "rebot_arm",
     srcs = ["rebot_arm.cpp"],
     hdrs = ["rebot_arm.hpp"],
-    # rebot_arm.cpp instantiates VampPlanner; the header is VAMP-free.
-    copts = VAMP_COPTS,
     data = ["//src/robot_model/rebot_arm_data:rs_arm_mjcf"],
     local_defines = [
         "REBOT_ARM_RS_MJCF=\\\"$(rlocationpath //src/robot_model/rebot_arm_data:rs_arm_mjcf)\\\"",
     ],
     deps = [
         ":rebot_arm_kinematics",
-        ":rebot_arm_vamp",
         "//src/robot_model/robot_model_utils:kdl_kinematics",
         "//src/robot_model/robot_model_utils:kinematics",
-        "//src/robot_model/robot_model_utils:motion_planner",
         "//src/robot_model/robot_model_utils:mujoco_model",
         "//src/robot_model/robot_model_utils:state_estimator",
         "//src/robot_model/robot_model_utils:renderer_api",
-        "//src/robot_model/robot_model_utils:vamp_planner",
     ],
 )
 
@@ -133,42 +127,6 @@ py_test(
     deps = [
         ":description",
         "@rules_python//python/runfiles",
-    ],
-)
-
-# ---- Motion planning (VAMP) ---------------------------------------------------
-
-# VAMP robot code (vamp::robots::RebotArm), generated at build time by cricket
-# from the spherized RS model (rebot_arm_data:rs_spheres.yaml).
-vamp_robot(
-    name = "rebot_arm_vamp",
-    end_effector = "gripper_end",
-    module = "rebot_arm",
-    srdf = "//src/robot_model/rebot_arm_data:rs_vamp.srdf",
-    struct_name = "RebotArm",
-    urdf = "//src/robot_model/rebot_arm_data:rs_vamp.urdf",
-    visibility = ["//visibility:private"],
-)
-
-# Planner CLI: JSON request on stdin -> path on stdout (robot_model_utils/planner_cli.hpp).
-# Used by //src/trajectory_generator to plan for the reBot.
-cc_binary(
-    name = "plan",
-    srcs = ["plan_main.cpp"],
-    deps = [
-        ":rebot_arm",
-        "//src/robot_model/robot_model_utils:planner_cli",
-    ],
-)
-
-cc_test(
-    name = "rebot_arm_planner_test",
-    size = "small",
-    srcs = ["rebot_arm_planner_test.cpp"],
-    deps = [
-        ":rebot_arm",
-        "//src/robot_model/two_link_arm",
-        "@rosdistro//cc:googletest",
     ],
 )
 

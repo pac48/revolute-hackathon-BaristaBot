@@ -1,0 +1,483 @@
+module(name = "baristabot")
+
+# Build tooling (versions follow the RCR examples workspace).
+bazel_dep(name = "llvm", version = "0.8.25.rcr.0")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "protobuf", version = "36.2")
+bazel_dep(name = "rules_cc", version = "0.2.26.rcr.0")
+bazel_dep(name = "rules_python", version = "2.4.5")
+
+# ROS packages from the RCR. "0.0.0" lets MVS pick the version pulled in
+# transitively by mujoco_ros2_control (see the RCR README).
+bazel_dep(name = "mujoco", version = "3.15.0.rcr.0")  # the viewer (@mujoco//:simulate): robot_model_utils/viewer.bzl
+bazel_dep(name = "mujoco_ros2_control", version = "0.1.2-1.rcr.0")
+
+# Fixes a segfault on every viewer shutdown, and gives subclasses (mit_system_interface) the node and
+# the per-step state; see the patches for details.
+single_version_override(
+    module_name = "mujoco_ros2_control",
+    patch_strip = 1,
+    patches = [
+        "//third_party/mujoco_ros2_control:free_gl_context_on_render_thread.patch",
+        "//third_party/mujoco_ros2_control:subclass_access.patch",
+    ],
+)
+
+# Shared memory in Fast DDS's default transports, as in upstream's CMake build.
+single_version_override(
+    module_name = "fastdds",
+    patch_strip = 1,
+    patches = ["//third_party/fastdds:shm_transport_builtin.patch"],
+)
+
+bazel_dep(name = "hardware_interface", version = "0.0.0")
+bazel_dep(name = "rosdistro", version = "0.0.0")
+bazel_dep(name = "controller_manager", version = "6.10.1-1.rcr.0")
+bazel_dep(name = "rclpy", version = "0.0.0")
+bazel_dep(name = "orocos-kdl", version = "1.5.3")  # KDL IK (//src/robot_model/robot_model_utils:kdl_kinematics)
+bazel_dep(name = "rclcpp", version = "0.0.0")  # C++ nodes (//src/teleop/controller:teleop)
+bazel_dep(name = "sensor_msgs", version = "0.0.0")
+bazel_dep(name = "std_msgs", version = "0.0.0")
+bazel_dep(name = "rosidl_default_generators", version = "0.0.0")  # //src/mujoco_state_msgs
+bazel_dep(name = "rosidl_default_runtime", version = "0.0.0")
+bazel_dep(name = "ament_cmake", version = "0.0.0")
+bazel_dep(name = "robot_state_publisher", version = "3.5.6-1.rcr.0")
+bazel_dep(name = "joint_state_broadcaster", version = "6.9.0-1.rcr.0")
+bazel_dep(name = "joint_trajectory_controller", version = "6.9.0-1.rcr.0")
+bazel_dep(name = "builtin_interfaces", version = "0.0.0")
+bazel_dep(name = "control_msgs", version = "0.0.0")
+bazel_dep(name = "trajectory_msgs", version = "0.0.0")
+bazel_dep(name = "geometry_msgs", version = "0.0.0")
+bazel_dep(name = "tf2_msgs", version = "0.0.0")
+bazel_dep(name = "usb_cam", version = "0.8.1-3.rcr.2")
+
+# Image stamps were off by up to 1 s; see the patch.
+single_version_override(
+    module_name = "usb_cam",
+    patch_strip = 1,
+    patches = ["//third_party/usb_cam:epoch_time_shift_usec.patch"],
+)
+
+# Orbbec camera driver (Gemini 305), from third_party/registry.
+bazel_dep(name = "orbbec_camera_msgs", version = "2.10.7")
+bazel_dep(name = "orbbec_camera", version = "2.10.7")
+bazel_dep(name = "orbbec_description", version = "2.10.7")
+bazel_dep(name = "xacro", version = "0.0.0")
+
+# Compressed image transports for RViz (//src/camera_drivers:orbbec_rviz).
+bazel_dep(name = "compressed_image_transport", version = "0.0.0")
+
+# Training data recording (//src/data_recorder): MCAP rosbags, images compressed with the depth codec and OpenCV.
+bazel_dep(name = "rosbag2_cpp", version = "0.33.4-1.rcr.0")
+bazel_dep(name = "rosbag2_storage", version = "0.33.4-1.rcr.0")
+bazel_dep(name = "rosbag2_storage_mcap", version = "0.33.4-1.rcr.0")
+bazel_dep(name = "compressed_depth_image_transport", version = "6.2.6-1.rcr.0")
+
+# URDF parser plugin for RViz's RobotModel display (orbbec_rviz).
+bazel_dep(name = "urdf", version = "0.0.0")
+bazel_dep(name = "urdf_parser_plugin", version = "0.0.0")
+
+bazel_dep(name = "rviz2", version = "15.2.6-1.rcr.1")
+
+# Qt 6.10's OpenSSL TLS backend (linked into Qt apps through QtNetwork) doesn't compile against OpenSSL 4
+# (the ASN1 types are opaque there), so stay on 3.x.
+single_version_override(
+    module_name = "openssl",
+    version = "3.5.8.bcr.0.rcr.0",
+)
+
+bazel_dep(name = "ffmpeg", version = "7.1.1.bcr.beta.13.rcr.0")  # for the --@ffmpeg//:enable_* flags in .bazelrc
+
+# ros2 command-line tools (//tools/ros2) and the interface packages they can show.
+bazel_dep(name = "ros2cli", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2action", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2component", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2controlcli", version = "6.10.1-1.rcr.0")
+bazel_dep(name = "ros2doctor", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2interface", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2lifecycle", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2multicast", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2node", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2param", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2pkg", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2run", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2service", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "ros2topic", version = "0.40.9-1.rcr.0")
+bazel_dep(name = "action_msgs", version = "2.4.5-1.rcr.2")
+bazel_dep(name = "diagnostic_msgs", version = "5.9.3-1.rcr.0")
+bazel_dep(name = "lifecycle_msgs", version = "2.4.5-1.rcr.2")
+bazel_dep(name = "statistics_msgs", version = "2.4.5-1.rcr.2")
+bazel_dep(name = "std_srvs", version = "5.9.3-1.rcr.0")
+bazel_dep(name = "rcl_interfaces", version = "2.4.5-1.rcr.2")
+bazel_dep(name = "rosgraph_msgs", version = "0.0.0")
+bazel_dep(name = "controller_manager_msgs", version = "0.0.0")
+
+# C++ ROS libraries of the controller plugin //src/controllers/joint_impedance_controller.
+bazel_dep(name = "angles", version = "0.0.0")
+bazel_dep(name = "backward_ros", version = "0.0.0")
+bazel_dep(name = "control_toolbox", version = "0.0.0")
+bazel_dep(name = "controller_interface", version = "0.0.0")
+bazel_dep(name = "generate_parameter_library", version = "0.0.0")
+bazel_dep(name = "kdl_parser", version = "0.0.0")
+bazel_dep(name = "pluginlib", version = "0.0.0")
+bazel_dep(name = "rclcpp_action", version = "0.0.0")
+bazel_dep(name = "rclcpp_lifecycle", version = "0.0.0")
+bazel_dep(name = "realtime_tools", version = "0.0.0")
+bazel_dep(name = "rsl", version = "0.0.0")
+
+# The system interface plugin //src/ros2_control_sim/mit_system_interface extends mujoco_ros2_control's.
+bazel_dep(name = "ament_index_cpp", version = "0.0.0")
+bazel_dep(name = "mujoco_ros2_control_msgs", version = "0.0.0")
+bazel_dep(name = "nav_msgs", version = "0.0.0")
+bazel_dep(name = "transmission_interface", version = "0.0.0")
+
+# MuJoCo plugins of the simulation (//src/ros2_control_sim): the camera publisher.
+bazel_dep(name = "mujoco_ros2_control_plugins", version = "0.0.0")
+
+register_toolchains("@llvm//toolchain:all")
+
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+llvm.version(llvm_version = "21.1.8")
+llvm.configure(targets = ["AArch64", "X86"])
+use_repo(llvm, "llvm-project")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.12",
+)
+
+# PyPI deps pinned by the ROS distro (e.g. pyyaml), via requirement() from @pip_ros.
+pip_ros = use_extension("@rosdistro//python:defs.bzl", "pip_ros")
+use_repo(pip_ros, "pip_ros")
+
+# reBot Arm B601 robot model (URDF, MJCF, meshes) from Seeed-Projects/reBot-DevArm,
+# pinned to a commit. GitHub only serves whole-repo tarballs (~317 MB, cached in
+# the repository cache after the first fetch); only Rebot_Arm_description/ is
+# extracted. See //src/robot_model/rebot_arm_data.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "rebot_arm_description",
+    build_file = "//src/robot_model/rebot_arm_data:rebot_arm_description.BUILD.bazel",
+    sha256 = "bd2f1e30d3882be23917476ed35b5623ebf6c6f056bd31448f965f9167263f8a",
+    strip_prefix = "reBot-DevArm-51694a3718585f33d3880cdfb6f19cea2501acc8/Rebot_Arm_description",
+    urls = ["https://github.com/Seeed-Projects/reBot-DevArm/archive/51694a3718585f33d3880cdfb6f19cea2501acc8.tar.gz"],
+)
+
+# fast_robot_kinematics (fast FK/IK by code generation) and LBFGSpp, the IK
+# solver it uses (the version its CMake fetches). BUILD files in //third_party/fast_robot_kinematics.
+http_archive(
+    name = "fast_robot_kinematics",
+    build_file = "//third_party/fast_robot_kinematics:fast_robot_kinematics.BUILD.bazel",
+    patch_args = ["-p1"],
+    patches = ["//third_party/fast_robot_kinematics:joint_limit_box_constraints.patch"],
+    integrity = "sha256-ueUWivfcpcGOdZUwFyMAL2eSg2RNrDrIaOh5ROM8Iko=",
+    strip_prefix = "fast_robot_kinematics-43395339e0cb02ffcc263a19288b1494f9662cdc",
+    urls = ["https://github.com/pac48/fast_robot_kinematics/archive/43395339e0cb02ffcc263a19288b1494f9662cdc.tar.gz"],
+)
+
+http_archive(
+    name = "lbfgspp",
+    build_file = "//third_party/fast_robot_kinematics:lbfgspp.BUILD.bazel",
+    integrity = "sha256-SQcgudWszmRZywM2yjrg/8SGdyJfDr+zXJvva679/Go=",
+    strip_prefix = "LBFGSpp-0.3.0",
+    urls = ["https://github.com/yixuan/LBFGSpp/archive/refs/tags/v0.3.0.tar.gz"],
+)
+
+# reBot Arm RS CAN driver (rebot_robstride_protocol, pluginlib protocol plugins) and the
+# header-only shared_can_interface it implements. BUILD files in //third_party/rebot_robstride_protocol.
+http_archive(
+    name = "shared_can_hardware",
+    build_file = "//third_party/rebot_robstride_protocol:shared_can_hardware.BUILD.bazel",
+    patch_args = ["-p1"],
+    patches = ["//third_party/rebot_robstride_protocol:can_system_retry_initial_reads.patch"],  # one lost reply no longer fails activation
+    sha256 = "6a6c4edab83938437740e1e040f89ac6d2d3537fa8f56cb6cf3b4189163684e3",
+    strip_prefix = "shared_can_hardware-fe1398b475b8e0e9a1b83640c2baad8a7461cd9b",
+    urls = ["https://github.com/xiayip/shared_can_hardware/archive/fe1398b475b8e0e9a1b83640c2baad8a7461cd9b.tar.gz"],
+)
+
+http_archive(
+    name = "rebot_arm_rs_ros2",
+    build_file = "//third_party/rebot_robstride_protocol:rebot_arm_rs_ros2.BUILD.bazel",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party/rebot_robstride_protocol:include_string.patch",  # missing #include <string> (libc++)
+        "//third_party/rebot_robstride_protocol:gripper_si_units.patch",  # `stroke`: gripper in m, m/s and N
+        "//third_party/rebot_robstride_protocol:gripper_velocity_feedforward.patch",  # slew velocity as dq_des
+        "//third_party/rebot_robstride_protocol:gripper_velocity_range.patch",  # m/s up to the motor's velocity limit
+        "//third_party/rebot_robstride_protocol:gripper_max_torque.patch",  # max_torque: limits the squeeze
+        "//third_party/rebot_robstride_protocol:gripper_max_torque_release.patch",  # a reversed target releases the limit
+    ],
+    sha256 = "99cff6e855900c5895d040ae273345e209b98b55411d552b210507792d58c434",
+    strip_prefix = "rebot_arm_rs_ros2-76dac2016cf3afa887390a393e8b969d20c0af98",
+    urls = ["https://github.com/xiayip/rebot_arm_rs_ros2/archive/76dac2016cf3afa887390a393e8b969d20c0af98.tar.gz"],
+)
+
+# VAMP (motion planning, https://github.com/kavrakilab/vamp) and the libraries
+# its CMake build fetches, at the commits it pins. BUILD files in //third_party/vamp.
+bazel_dep(name = "eigen", version = "5.0.1.bcr.1")
+
+# cricket (VAMP robot code generator) dependencies, at the versions already in
+# the module graph; CppAD, CppADCodeGen and CGAL are http_archives below.
+bazel_dep(name = "pinocchio", version = "4.1.0-1.rcr.0")
+bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # CGAL exact arithmetic without GMP
+bazel_dep(name = "cxxopts", version = "3.3.1")
+bazel_dep(name = "fmt", version = "12.2.0.bcr.1.rcr.0")
+bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2")
+
+http_archive(
+    name = "vamp",
+    build_file = "//third_party/vamp:vamp.BUILD.bazel",
+    sha256 = "bb4871eebe6b52a31094124a77606e683e25f6194a84098bcbe27699f4daefbb",
+    strip_prefix = "vamp-27cb9b66ebd8d101ce88d330f3b028398afc1cfa",
+    urls = ["https://github.com/kavrakilab/vamp/archive/27cb9b66ebd8d101ce88d330f3b028398afc1cfa.tar.gz"],
+)
+
+http_archive(
+    name = "nigh",
+    build_file = "//third_party/vamp:nigh.BUILD.bazel",
+    sha256 = "76d9b42da8d14f09d61331d786c1fda5bfd8fe2756cc7144e1c8482c44c7bd41",
+    strip_prefix = "nigh-97130999440647c204e0265d05a997dbd8da4e70",
+    urls = ["https://github.com/kavrakilab/nigh/archive/97130999440647c204e0265d05a997dbd8da4e70.tar.gz"],
+)
+
+http_archive(
+    name = "pdqsort",
+    build_file = "//third_party/vamp:pdqsort.BUILD.bazel",
+    sha256 = "1df2463f94ebd926f402e7bcd92bf4a16f7a35732080a607fe4716888f1edbb5",
+    strip_prefix = "pdqsort-b1ef26a55cdb60d236a5cb199c4234c704f46726",
+    urls = ["https://github.com/orlp/pdqsort/archive/b1ef26a55cdb60d236a5cb199c4234c704f46726.tar.gz"],
+)
+
+http_archive(
+    name = "cddlib",
+    build_file = "//third_party/vamp:cddlib.BUILD.bazel",
+    sha256 = "766d8ec2135989830748e5e2fe57f307ed0706431c135541c3c081cbec0bc34f",
+    strip_prefix = "cddlib-0.94m",
+    urls = ["https://github.com/cddlib/cddlib/archive/refs/tags/0.94m.tar.gz"],
+)
+
+http_archive(
+    name = "simdxorshift",
+    build_file = "//third_party/vamp:simdxorshift.BUILD.bazel",
+    sha256 = "fa1578e3b89383726765807d0751606a442d62b8f2e7c8eb2aacd76d7dbef618",
+    strip_prefix = "SIMDxorshift-857c1a01df53cf1ee1ae8db3238f0ef42ef8e490",
+    urls = ["https://github.com/lemire/SIMDxorshift/archive/857c1a01df53cf1ee1ae8db3238f0ef42ef8e490.tar.gz"],
+)
+
+# cricket (https://github.com/CoMMALab/cricket): generates VAMP robot code from a
+# spherized URDF. BUILD files in //third_party/cricket.
+http_archive(
+    name = "cricket",
+    build_file = "//third_party/cricket:cricket.BUILD.bazel",
+    sha256 = "f1d16cfa759060a0f4f24189f23ac1ac29e906cad62df73e2d784df151ca689c",
+    strip_prefix = "cricket-39662805f8d1a1f961e2767061f470ff56efe7a8",
+    urls = ["https://github.com/CoMMALab/cricket/archive/39662805f8d1a1f961e2767061f470ff56efe7a8.tar.gz"],
+)
+
+http_archive(
+    name = "cppad",
+    build_file = "//third_party/cricket:cppad.BUILD.bazel",
+    sha256 = "a3a4030ae49719e88e5057e923c4c97c5ba8910e22471f22661420ce65747fbe",
+    strip_prefix = "CppAD-20250000.3",
+    urls = ["https://github.com/coin-or/CppAD/archive/refs/tags/20250000.3.tar.gz"],
+)
+
+http_archive(
+    name = "cppadcg",
+    build_file = "//third_party/cricket:cppadcg.BUILD.bazel",
+    sha256 = "a53d3e91cfa17381f31819d549de71767b90d05e671fa848043694b0f53d6c18",
+    strip_prefix = "CppADCodeGen-2.5.0",
+    urls = ["https://github.com/joaoleal/CppADCodeGen/archive/refs/tags/v2.5.0.tar.gz"],
+)
+
+http_archive(
+    name = "cgal",
+    build_file = "//third_party/cricket:cgal.BUILD.bazel",
+    sha256 = "8e7ce1e30e8ffcb3e69d153c3a561bb1f38bbb4becd8e6544cbaa0fb2889af62",
+    strip_prefix = "CGAL-6.2.1",
+    urls = ["https://github.com/CGAL/cgal/releases/download/v6.2.1/CGAL-6.2.1-library.tar.xz"],
+)
+
+# foam (https://github.com/CoMMALab/foam): spherization of robot meshes, used to
+# seed VAMP sphere specs. BUILD files in //third_party/foam; Python deps are the
+# @pip_foam hub (//third_party/foam:requirements_lock.txt).
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pip_foam",
+    python_version = "3.12",
+    requirements_lock = "//third_party/foam:requirements_lock.txt",
+)
+use_repo(pip, "pip_foam")
+
+# @pip_ros2_tools hub (//tools/ros2:requirements_lock.txt): a newer argcomplete for ros2's completion.
+pip.parse(
+    hub_name = "pip_ros2_tools",
+    python_version = "3.12",
+    requirements_lock = "//tools/ros2:requirements_lock.txt",
+)
+use_repo(pip, "pip_ros2_tools")
+
+# @pip_quest_bridge hub (//src/teleop/quest_bridge:requirements_lock.txt): websockets for the Quest bridge.
+pip.parse(
+    hub_name = "pip_quest_bridge",
+    python_version = "3.12",
+    requirements_lock = "//src/teleop/quest_bridge:requirements_lock.txt",
+)
+use_repo(pip, "pip_quest_bridge")
+
+# @pip_ovrtx hub (//third_party/ovrtx:requirements_lock.txt): ovrtx and ovstage
+# (NVIDIA Omniverse RTX sensor simulation; wheels come from pypi.nvidia.com).
+pip.parse(
+    hub_name = "pip_ovrtx",
+    python_version = "3.12",
+    requirements_lock = "//third_party/ovrtx:requirements_lock.txt",
+)
+use_repo(pip, "pip_ovrtx")
+
+# @pip_mpc hub (//src/sampling_mpc:requirements_lock.txt): MuJoCo Warp, Warp and SciPy for the sampling MPC.
+pip.parse(
+    hub_name = "pip_mpc",
+    python_version = "3.12",
+    requirements_lock = "//src/sampling_mpc:requirements_lock.txt",
+)
+use_repo(pip, "pip_mpc")
+
+# @pip_lerobot hub (//src/lerobot_export:requirements_lock.txt): LeRobot (and PyTorch) and the MCAP
+# readers for converting recorded episodes to LeRobot datasets.
+pip.parse(
+    hub_name = "pip_lerobot",
+    python_version = "3.12",
+    requirements_lock = "//src/lerobot_export:requirements_lock.txt",
+)
+use_repo(pip, "pip_lerobot")
+
+# rules_python evaluates the markers of a package's requirements on itself (lerobot[x]; extra == "all") without the
+# platform, so the one with sys_platform fails analysis; it is only in lerobot's "all" extra, which is not used.
+pip.override(
+    file = "lerobot-0.7.0-py3-none-any.whl",
+    patch_strip = 1,
+    patches = ["//src/lerobot_export:lerobot_metadata.patch"],
+)
+
+# The ovrtx and ovstage C SDKs (//src/robot_model/robot_model_utils:renderer), unpacked from the
+# NVIDIA wheels (a wheel is a zip) that the hub above installs for Python. BUILD files in
+# //third_party/ovrtx. x86_64 Linux only. The wheels are 1.4 GB and 60 MB, fetched on first use.
+http_archive(
+    name = "ovrtx_sdk",
+    build_file = "//third_party/ovrtx:ovrtx.BUILD.bazel",
+    sha256 = "1e36c2e6d892650cdc46edb58ebfd668addb5b7fd3b0b15fe9f32b1b9b12c0ee",
+    type = "zip",
+    urls = ["https://pypi.nvidia.com/ovrtx/ovrtx-0.7.0.1794596436-py3-none-manylinux_2_35_x86_64.whl"],
+)
+
+http_archive(
+    name = "ovstage_sdk",
+    build_file = "//third_party/ovrtx:ovstage.BUILD.bazel",
+    sha256 = "7473a79763af4f8fe8dc70cbd4d99468d822a8f96a0c58891c25801390958f0a",
+    type = "zip",
+    urls = ["https://pypi.nvidia.com/ovstage/ovstage-0.4.0.1794520352-py3-none-manylinux_2_35_x86_64.whl"],
+)
+
+http_archive(
+    name = "foam",
+    build_file = "//third_party/foam:foam.BUILD.bazel",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party/foam:binary_paths.patch",
+        "//third_party/foam:spheretree_minmax.patch",
+    ],
+    sha256 = "48043cb252ed1660cae87430d3743bd3735ef7a30d028b2d242c1ea864762174",
+    strip_prefix = "foam-116928f71aaa7c40356d79c84d3c9ff1f4497d90",
+    urls = ["https://github.com/CoMMALab/foam/archive/116928f71aaa7c40356d79c84d3c9ff1f4497d90.tar.gz"],
+)
+
+# foam's git submodules, at the commits it pins (libigl: ManifoldPlus's submodule).
+http_archive(
+    name = "manifoldplus",
+    build_file = "//third_party/foam:manifoldplus.BUILD.bazel",
+    sha256 = "ff86df4e97888d131c72cfc8b79045a442a9d8340d082dcc2d20050dd696b961",
+    strip_prefix = "ManifoldPlus-a0cc6d9817f81efff63b704a2fed53567ea44cbd",
+    urls = ["https://github.com/hjwdzh/ManifoldPlus/archive/a0cc6d9817f81efff63b704a2fed53567ea44cbd.tar.gz"],
+)
+
+http_archive(
+    name = "manifold_old",
+    build_file = "//third_party/foam:manifold_old.BUILD.bazel",
+    sha256 = "6e490a753b20ce49e53a92ea1f153cc2ffb4dbc10eb09143fce88c4820bb85f0",
+    strip_prefix = "Manifold-81fd342e578e29fc15fb75d2b4d1e3c821fe33cb",
+    urls = ["https://github.com/hjwdzh/Manifold/archive/81fd342e578e29fc15fb75d2b4d1e3c821fe33cb.tar.gz"],
+)
+
+http_archive(
+    name = "fqms",
+    build_file = "//third_party/foam:fqms.BUILD.bazel",
+    sha256 = "fd8bf55a675f2d162b2fcc1ed05a59b7fc22f8391afe6727bd00d21e41d658cf",
+    strip_prefix = "Fast-Quadric-Mesh-Simplification-2927c8209be291088b939cd934f1b69844922f26",
+    urls = ["https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification/archive/2927c8209be291088b939cd934f1b69844922f26.tar.gz"],
+)
+
+http_archive(
+    name = "libigl",
+    build_file = "//third_party/foam:libigl.BUILD.bazel",
+    sha256 = "3fb3ae1051a3f32614d7bda6afcf9b20db0fa4340439012f3200d864604de299",
+    strip_prefix = "libigl-d402d9495995d6324085a1ec5934961f7211ba12",
+    urls = ["https://github.com/libigl/libigl/archive/d402d9495995d6324085a1ec5934961f7211ba12.tar.gz"],
+)
+
+# ---- Android (Quest teleop app, //src/teleop/quest_app/app) ----------------------------
+# rules_android + rules_android_ndk with the SDK, NDK and platform-tools (adb) downloaded at
+# pinned versions by hermetic_android_toolchains: no local Android install needed (its
+# extension is meant to be used as a dev dependency; this module is always the root). Licenses:
+# ACCEPTED_ANDROID_*_LICENSE_VERSION in .bazelrc.
+bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_android_ndk", version = "0.1.5")
+bazel_dep(name = "hermetic_android_toolchains", version = "0.5.0")
+
+android = use_extension("@hermetic_android_toolchains//:extensions.bzl", "android", dev_dependency = True)
+android.sdk(
+    build_tools_version = "35.0.0",
+    version = "34",
+)
+android.ndk(
+    api_level = 30,  # AndroidBitmap_compress (the app's JPEG view stream); Quest OS is API 32
+    version = "r27c",
+)
+use_repo(android, "androidndk", "androidsdk")
+
+# rules_android's and rules_android_ndk's @androidsdk / @androidndk are the hermetic ones.
+rules_android_sdk = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+    dev_dependency = True,
+)
+override_repo(rules_android_sdk, "androidsdk")
+
+rules_android_ndk = use_extension(
+    "@rules_android_ndk//:extension.bzl",
+    "android_ndk_repository_extension",
+    dev_dependency = True,
+)
+override_repo(rules_android_ndk, "androidndk")
+
+register_toolchains(
+    "@androidndk//:all",
+    "@androidsdk//:all",
+)
+
+# rules_android builds some of its tools in Go; gazelle's go.work needs Go >= 1.24.12, newer
+# than rules_go's default SDK.
+bazel_dep(name = "rules_go", version = "0.62.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.24.12")
+
+# Khronos OpenXR loader for Android: the AAR's prefab .so and headers, imported directly.
+http_archive(
+    name = "openxr_loader_android",
+    build_file = "//third_party/openxr_loader:openxr_loader_android.BUILD.bazel",
+    sha256 = "622419d2f6741c3443a3beb4779af0764318edd01830de967f24c741ebcded73",
+    type = "zip",
+    urls = ["https://repo1.maven.org/maven2/org/khronos/openxr/openxr_loader_for_android/1.1.63/openxr_loader_for_android-1.1.63.aar"],
+)
