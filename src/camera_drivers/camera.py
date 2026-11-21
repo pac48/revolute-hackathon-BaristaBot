@@ -2,13 +2,20 @@
 
 Usage (on the machine with the camera, e.g. the remote build host):
   bazel run //src/camera_drivers:camera.remote -- [--device D] [--width W --height H --fps F]
-      [--format raw | --pixel-format P]
+      [--format raw | --pixel-format P] [--namespace NS]
+
+Several cameras at once: one run per camera, each with its own --device and --namespace, e.g.
+  bazel run //src/camera_drivers:camera -- --namespace /scene_camera --device /dev/v4l/by-id/...
+  bazel run //src/camera_drivers:camera -- --namespace /center_camera --device /dev/v4l/by-id/...
+publishes /scene_camera/image_raw and /center_camera/image_raw (the names lerobot_export.conventions.CAMERAS
+expects, after the recorder compresses them to <topic>/compressed).
 
 The camera settings come from config/usb_cam.yaml; each flag given overrides
 the matching parameter for this run only:
   --device        video_device; /dev/v4l/by-id/...-video-index0 paths are stable across
                   replugging (resolved here: usb_cam can't open symlinks itself)
   --width/--height/--fps   image_width / image_height / framerate
+  --namespace     ROS namespace of this camera's topics and nodes (default: none, /image_raw)
 
 image_width / image_height of 0 (the default) pick the mode automatically from
 what the camera reports (v4l2_modes.select_mode): its native aspect ratio, the
@@ -76,7 +83,12 @@ def main():
     ap.add_argument("--fps", type=float)
     ap.add_argument("--max-width", type=int, default=1280, help="largest width auto picks (default 1280)")
     ap.add_argument("--exit-on-stdin-eof", action="store_true", help="stop when stdin closes")
+    ap.add_argument("--namespace", default="",
+                    help="ROS namespace for this camera, e.g. /scene_camera -> /scene_camera/image_raw (default: none)")
     args = ap.parse_args()
+
+    # "" (no namespace) or "/name": usb_cam's __ns remap and rclpy both want a leading slash.
+    ns = "/" + args.namespace.strip("/") if args.namespace.strip("/") else ""
 
     signal.signal(signal.SIGTERM, _stop)
     if args.exit_on_stdin_eof:
@@ -133,14 +145,15 @@ def main():
     }
     camera = usb_cam_node.popen(
         "--ros-args",
+        *(("-r", f"__ns:={ns}") if ns else ()),
         "--params-file", usb_cam_params.path(),
         *(arg for k, v in overrides.items() for arg in ("-p", f"{k}:={v}")),
     )
     rclpy.init()
     try:
-        node = rclpy.create_node("clock_echo")
-        # The model (//src/camera_models/usb_camera) on /camera/robot_description, with its static TF.
-        description_node = rclpy.create_node("description", namespace=f"/{CAMERA_NAME}")
+        node = rclpy.create_node("clock_echo", namespace=ns or None)
+        # The model (//src/camera_models/usb_camera) on <ns>/camera/robot_description, with its static TF.
+        description_node = rclpy.create_node("description", namespace=f"{ns}/{CAMERA_NAME}")
         CameraDescription(description_node, description.urdf_text(), driver_root=description.DRIVER_ROOT)
         pong = node.create_publisher(Header, clock_probe.PONG_TOPIC, clock_probe.QOS)
 
