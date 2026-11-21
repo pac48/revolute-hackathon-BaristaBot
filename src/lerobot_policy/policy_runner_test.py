@@ -21,7 +21,7 @@ class PolicyRunnerTest(unittest.TestCase):
     def setUpClass(cls):
         cls.dir = Path(tempfile.mkdtemp())
         cls.joint = save_checkpoint(cls.dir / "joint", 7)
-        cls.ee = save_checkpoint(cls.dir / "ee", 10, cameras=("scene", "center"))
+        cls.ee = save_checkpoint(cls.dir / "ee", 10, cameras=("main",))
 
     def images(self, runner):
         return {cam: np.zeros(IMAGE, np.uint8) for cam in runner.cameras}
@@ -61,7 +61,7 @@ class PolicyRunnerTest(unittest.TestCase):
 
     def test_ee_space(self):
         with PolicyRunner(self.ee, device=CPU, model="rebot_arm_gemini_305") as runner:
-            self.assertEqual((runner.space, sorted(runner.cameras)), ("ee", ["center", "scene"]))
+            self.assertEqual((runner.space, sorted(runner.cameras)), ("ee", ["main"]))
             # The observation: the tool's pose at HOME by FK (grasp_cube's home: the tool at (0.40, 0, 0.34)) and the gripper.
             state = runner.observation(HOME, self.images(runner))["observation.state"]
             np.testing.assert_allclose(state[:3], [0.40, 0.0, 0.34], atol=0.01)

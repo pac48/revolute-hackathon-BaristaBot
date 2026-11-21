@@ -13,18 +13,28 @@ import numpy as np
 JOINTS = [f"joint{i}" for i in range(1, 8)]  # the arm's joint1..6 (rad) and the gripper (joint7: its opening, m)
 ARM_JOINTS = JOINTS[:6]  # the kinematic chain (base_link -> gripper_end)
 POSE_NAMES = ["x", "y", "z", "qx", "qy", "qz", "qw"]
+# --arms: one arm (joint1..7) or two (left_joint1..7 then right_joint1..7, as rebot_dual_arm_gemini_305 names them).
+ARM_PREFIXES = {"single": ("",), "dual": ("left_", "right_")}
+
+
+def arm_joints(arms: str = "single") -> list[str]:
+    """The joints of --arms, in the datasets' order: JOINTS, or each arm's JOINTS with its prefix."""
+    return [f"{prefix}{j}" for prefix in ARM_PREFIXES[arms] for j in JOINTS]
+
+
+def arm_pose_names(arms: str = "single") -> list[str]:
+    """POSE_NAMES for each arm of --arms (each arm's tool in its own base_link)."""
+    return [f"{prefix}{n}" for prefix in ARM_PREFIXES[arms] for n in POSE_NAMES]
 EE_NAMES = ["x", "y", "z", "r11", "r21", "r31", "r12", "r22", "r32", "gripper"]  # --space ee: ee_vector
 SPACES = {len(JOINTS): "joint", len(EE_NAMES): "ee"}  # observation.state's size -> the space
 JOINT_STATES = "/joint_states"
 CONTROLLER = "joint_trajectory_controller"  # recorded through, and commanded through at run time
 CONTROLLER_STATE = f"/{CONTROLLER}/controller_state"
-# Camera name -> (colour topic, depth topic): the overhead USB camera and the camera between the two arms, both run
-# by //src/camera_drivers:camera with --namespace /scene_camera and /center_camera (the recorder stores their
-# image_raw as image_raw/compressed). The depth topics are only read with bag_to_lerobot --depth; these cameras
-# publish none. The dataset's key of a camera is observation.images.<name>.
+# Camera name -> (colour topic, depth topic): the one camera the BaristaBot demos are recorded with, as its driver
+# publishes it under /camera (the recorder stores color/image_raw as color/image_raw/compressed). The depth topic is
+# only read with bag_to_lerobot --depth. The dataset's key of a camera is observation.images.<name>.
 CAMERAS = {
-    "scene": ("/scene_camera/image_raw/compressed", "/scene_camera/depth/image_raw/compressedDepth"),
-    "center": ("/center_camera/image_raw/compressed", "/center_camera/depth/image_raw/compressedDepth"),
+    "main": ("/camera/color/image_raw/compressed", "/camera/depth/image_raw/compressedDepth"),
 }
 IMAGE_KEY_PREFIX = "observation.images."
 # The datasets' images (H, W): the cameras' 720 x 1280 halved. ACT at 720p (3 cameras, 2760 image tokens) does not
@@ -93,9 +103,15 @@ def ee_vector(pose: np.ndarray, joints: np.ndarray) -> np.ndarray:
     return np.concatenate([pose[:, :3], rotation_6d(pose[:, 3:]), joints[:, 6:7]], axis=1).astype(np.float32)
 
 
-def vector_features(space: str) -> dict[str, list[str]]:
+def vector_features(space: str, arms: str = "single") -> dict[str, list[str]]:
     """The vector features' names, by key. LeRobot's policies take their state and their target from exactly
-    observation.state and action (the other keys are in the dataset, for other uses): --space chooses what those are."""
+    observation.state and action (the other keys are in the dataset, for other uses): --space chooses what those are.
+    Two arms (--arms dual) are joint space only: both arms' joints, then both tools' poses."""
+    if arms != "single":
+        if space != "joint":
+            raise ValueError(f"--arms {arms} supports only --space joint")
+        joints, pose = arm_joints(arms), arm_pose_names(arms)
+        return {"observation.state": joints, "observation.ee_pose": pose, "action": joints, "action.ee_pose": pose}
     if space == "ee":
         return {"observation.state": EE_NAMES, "observation.joints": JOINTS, "action": EE_NAMES, "action.joints": JOINTS}
     return {"observation.state": JOINTS, "observation.ee_pose": POSE_NAMES, "action": JOINTS, "action.ee_pose": POSE_NAMES}

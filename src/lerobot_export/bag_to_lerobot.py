@@ -2,7 +2,7 @@
 
 Usage: bazel run //src/lerobot_export:bag_to_lerobot -- recordings/grasp --repo-id local/rebot_grasp_cube
            [--output DIR] [--overwrite] [--task "..."] [--fps 20] [--space joint|ee] [--image-size 360x640] [--jobs N] [--depth]
-           [--model rebot_arm_gemini_305]
+           [--model rebot_arm_gemini_305] [--arms single|dual]
 
 Each episode becomes one LeRobot episode, sampled on a uniform --fps grid (LeRobot's timestamps are
 frame_index / fps) over the time all the streams cover, by the messages' header stamps. The joints:
@@ -28,6 +28,10 @@ values are stored raw); --space chooses what they are, the other keys are there 
   observation.depth.<camera>  with --depth: the depth image (uint16 mm; a LeRobot depth map, 12-bit HEVC video)
 
 FK is the --model's kinematics (kinematics_client: the model's kinematics CLI).
+
+--arms dual (rebot_dual_arm_gemini_305's recordings): the vectors are both arms', left then right, each arm's
+joints prefixed (left_joint1..7, right_joint1..7: 14 values) and each tool's pose by the single arm --model's FK in
+its own base_link (left_x..left_qw, right_x..right_qw). Joint space only.
 """
 
 import argparse
@@ -52,6 +56,8 @@ from src.lerobot_export.conventions import (  # noqa: F401 (re-exported: the fra
     JOINT_STATES,
     JOINTS,
     POSE_NAMES,
+    ARM_PREFIXES,
+    arm_joints,
     IMAGE_SIZE,
     decode_color,
     resize,
@@ -81,8 +87,9 @@ def positions(names: list[str], values: list[float], wanted: list[str]) -> list[
     return [values[index[n]] for n in wanted]
 
 
-def read_bag(mcap_path: Path, depth: bool) -> dict[str, Series]:
-    """The episode's joint states, controller references and (compressed) images, by topic."""
+def read_bag(mcap_path: Path, depth: bool, joints: list[str] = JOINTS) -> dict[str, Series]:
+    """The episode's joint states, controller references and (compressed) images, by topic. joints: the names to
+    take, in order (JOINTS, or arm_joints("dual") for two arms)."""
     image_topics = [t for color, d in CAMERAS.values() for t in ((color, d) if depth else (color,))]
     series = {t: Series() for t in [JOINT_STATES, CONTROLLER_STATE, *image_topics]}
     with open(mcap_path, "rb") as f:
@@ -90,11 +97,14 @@ def read_bag(mcap_path: Path, depth: bool) -> dict[str, Series]:
         for _, channel, _, msg in reader.iter_decoded_messages(topics=list(series)):
             s = series[channel.topic]
             if channel.topic == JOINT_STATES:
-                if not set(JOINTS) <= set(msg.name):
+                if not set(joints) <= set(msg.name):
                     continue  # e.g. a JointState of another source with only some joints
-                s.values.append(positions(msg.name, msg.position, JOINTS))
+                s.values.append(positions(msg.name, msg.position, joints))
             elif channel.topic == CONTROLLER_STATE:
-                s.values.append(positions(msg.joint_names, msg.reference.positions, JOINTS))
+                if not set(joints) <= set(msg.joint_names):
+                    raise ValueError(f"{mcap_path}: {CONTROLLER_STATE} has {list(msg.joint_names)}, not all of {joints}"
+                                     " (two arms' recordings need --arms dual)")
+                s.values.append(positions(msg.joint_names, msg.reference.positions, joints))
             else:
                 s.values.append(bytes(msg.data))
             s.stamps.append(stamp(msg.header))
@@ -188,7 +198,8 @@ def features(series: dict[str, Series], args) -> dict:
         h, w, c = decode(data).shape
         return {"dtype": "video", "shape": (h, w, c), "names": ["height", "width", "channels"], **extra}
 
-    result = {key: {"dtype": "float32", "shape": (len(names),), "names": names} for key, names in vector_features(args.space).items()}
+    result = {key: {"dtype": "float32", "shape": (len(names),), "names": names}
+              for key, names in vector_features(args.space, args.arms).items()}
     for key, (topic, decode) in image_decoders(args).items():
         extra = {"info": {"is_depth_map": True}} if key.startswith("observation.depth.") else {}
         result[key] = video(series[topic].values[0], decode, extra)
@@ -219,9 +230,16 @@ def convert_episode(dataset, series: dict[str, Series], args) -> int:
     state = interpolate(series[JOINT_STATES].stamps, series[JOINT_STATES].values, times).astype(np.float32)
     reference = series[CONTROLLER_STATE]
     action = np.asarray(reference.values, dtype=np.float32)[latest(reference.stamps, times)]
-    state_pose, action_pose = np.split(poses(args.model, np.concatenate([state, action])), 2)  # one FK call
-    state_pose = continuous_quaternions(state_pose)
-    action_pose = continuous_quaternions(action_pose, reference=state_pose)
+    # Each arm's tool by the single arm's FK (one call per arm), its quaternions made continuous on their own.
+    n = len(JOINTS)
+    state_poses, action_poses = [], []
+    for k in range(len(ARM_PREFIXES[args.arms])):
+        cols = slice(k * n, (k + 1) * n)
+        arm_state_pose, arm_action_pose = np.split(poses(args.model, np.concatenate([state[:, cols], action[:, cols]])), 2)
+        arm_state_pose = continuous_quaternions(arm_state_pose)
+        state_poses.append(arm_state_pose)
+        action_poses.append(continuous_quaternions(arm_action_pose, reference=arm_state_pose))
+    state_pose, action_pose = np.concatenate(state_poses, axis=1), np.concatenate(action_poses, axis=1)
     vectors = vector_values(args.space, state, action, state_pose, action_pose)
     image_keys = image_decoders(args)
     picks = {}
@@ -246,13 +264,13 @@ def convert_bag(bag: Path, root: Path, args) -> int:
     """One episode into a dataset of its own at root (a process of the pool: datasets have one writer each)."""
     from lerobot.datasets.lerobot_dataset import LeRobotDataset  # slow (PyTorch): in the workers, after the arguments
 
-    series = read_bag(bag, args.depth)
+    series = read_bag(bag, args.depth, arm_joints(args.arms))
     dataset = LeRobotDataset.create(
         repo_id=args.repo_id,
         fps=args.fps,
         features=features(series, args),
         root=root,
-        robot_type=args.model,
+        robot_type=args.model if args.arms == "single" else f"{args.model}_{args.arms}",
         use_videos=True,
     )
     try:
@@ -297,9 +315,14 @@ def main() -> int:
                          "as a colour camera's: these datasets are for a policy that handles depth")
     ap.add_argument("--model", default="rebot_arm_gemini_305", choices=sorted(kinematics_client.KINEMATICS),
                     help="the robot model whose kinematics give the poses (default rebot_arm_gemini_305)")
+    ap.add_argument("--arms", choices=sorted(ARM_PREFIXES), default="single",
+                    help="one arm (joint1..7, default) or two (left_/right_joint1..7: rebot_dual_arm_gemini_305; "
+                         "--space joint only)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count(),
                     help="episodes converted at once, a process each (default: the number of CPUs)")
     args = ap.parse_args()
+    if args.arms != "single" and args.space != "joint":
+        ap.error(f"--arms {args.arms} supports only --space joint")
 
     source = resolve(args.input)
     output = resolve(args.output) if args.output else source.with_name(source.name + "_lerobot")

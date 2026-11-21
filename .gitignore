@@ -5,3 +5,5 @@ user.bazelrc
 **/spheres.obj
 **/spheres.mtl
 /outputs/
+recordings/
+*_lerobot/

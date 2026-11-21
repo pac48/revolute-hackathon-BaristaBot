@@ -6,7 +6,7 @@ Visualization Manager:
   Displays:
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Name: Camera
+      Name: Scene camera
       Max Value: 1
       Min Value: 0
       Median window: 5
@@ -16,7 +16,20 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /image_raw
+        Value: /scene_camera/image_raw
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Center camera
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Normalize Range: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /center_camera/image_raw
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
