@@ -1,0 +1,145 @@
+# shared_can_interface (headers) and shared_can_ros2: the SocketCAN transport, the pre-enable readiness
+# helper, and CanSystem, the ros2_control hardware that loads a transport and the protocol plugins
+# (@rebot_arm_rs_ros2//:rebot_robstride_protocol) by pluginlib.
+#
+# CanSystem and the transport are separate shared libraries (upstream builds one libshared_can_ros2):
+# a pluginlib plugin's library path is its ament package's, and they are two plugin categories.
+# :ament_index is the hardware plugin, :socketcan_ament_index the transport.
+
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "shared_can_interface",
+    hdrs = glob(["shared_can_interface/include/shared_can_interface/*.hpp"]),
+    includes = ["shared_can_interface/include"],
+)
+
+# The ament package pluginlib's ClassLoader looks for by the plugins' base-class package name.
+ament_index(
+    name = "shared_can_interface_ament_index",
+    export_name = "shared_can_interface",
+    package_xml = "shared_can_interface/package.xml",
+)
+
+# Pre-enable readiness helper (no ROS).
+cc_library(
+    name = "shared_can_ros2_readiness",
+    srcs = ["shared_can_ros2/src/enable_readiness.cpp"],
+    hdrs = ["shared_can_ros2/include/shared_can_ros2/enable_readiness.hpp"],
+    includes = ["shared_can_ros2/include"],
+    deps = [":shared_can_interface"],
+)
+
+# SocketCAN transport (a pluginlib plugin; no ROS but pluginlib's macro).
+cc_library(
+    name = "shared_can_ros2_transport",
+    srcs = [
+        "shared_can_ros2/src/socketcan_io.cpp",
+        "shared_can_ros2/src/socketcan_io.hpp",
+        "shared_can_ros2/src/socketcan_transport.cpp",
+    ],
+    hdrs = ["shared_can_ros2/include/shared_can_ros2/socketcan_transport.hpp"],
+    includes = ["shared_can_ros2/include"],
+    deps = [
+        ":shared_can_interface",
+        "@pluginlib//:pluginlib_library",
+    ],
+)
+
+cc_shared_library(
+    name = "shared_can_ros2_socketcan",
+    dynamic_deps = ["@pluginlib//:pluginlib"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":shared_can_ros2_transport"],
+)
+
+genrule(
+    name = "socketcan_transport_plugin_xml",
+    srcs = ["shared_can_ros2/shared_can_ros2_transport.xml"],
+    outs = ["socketcan_transport_plugin.xml"],
+    cmd = "sed 's/path=\"shared_can_ros2\"/path=\"shared_can_ros2_socketcan\"/' $< > $@",
+)
+
+genrule(
+    name = "socketcan_package_xml",
+    outs = ["socketcan_package.xml"],
+    cmd = """cat > $@ <<'XML'
+<?xml version="1.0"?>
+<package format="3">
+  <name>shared_can_ros2_socketcan</name>
+  <version>0.0.0</version>
+  <description>SocketCAN transport plugin of shared_can_ros2</description>
+  <maintainer email="noreply@example.com">home-institute</maintainer>
+  <license>Apache-2.0</license>
+</package>
+XML""",
+)
+
+ament_index(
+    name = "socketcan_ament_index",
+    export_name = "shared_can_ros2_socketcan",
+    libraries = [":shared_can_ros2_socketcan"],
+    package_xml = ":socketcan_package.xml",
+    plugin_category = "shared_can_interface",
+    plugins = [":socketcan_transport_plugin.xml"],
+    deps = ["@pluginlib//:ament_package"],
+)
+
+DEPENDENCIES = {
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+cc_library(
+    name = "can_system_library",
+    srcs = ["shared_can_ros2/src/can_system.cpp"],
+    hdrs = ["shared_can_ros2/include/shared_can_ros2/can_system.hpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["shared_can_ros2/include"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + [
+        ":shared_can_interface",
+        ":shared_can_ros2_readiness",
+    ],
+)
+
+cc_shared_library(
+    name = "shared_can_ros2",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":can_system_library"],
+)
+
+genrule(
+    name = "can_system_package_xml",
+    outs = ["can_system_package.xml"],
+    cmd = """cat > $@ <<'XML'
+<?xml version="1.0"?>
+<package format="3">
+  <name>shared_can_ros2</name>
+  <version>0.0.0</version>
+  <description>CanSystem, a ros2_control hardware sharing one CAN transport among protocol plugins</description>
+  <maintainer email="noreply@example.com">home-institute</maintainer>
+  <license>Apache-2.0</license>
+</package>
+XML""",
+)
+
+ament_index(
+    name = "ament_index",
+    export_name = "shared_can_ros2",
+    libraries = [":shared_can_ros2"],
+    package_xml = ":can_system_package.xml",
+    plugin_category = "hardware_interface",
+    plugins = ["shared_can_ros2/shared_can_ros2_hardware.xml"],
+    deps = [
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+    ],
+)

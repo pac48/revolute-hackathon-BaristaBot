@@ -1,0 +1,102 @@
+# Quest Teleop bridge: WebSocket server for the native Quest app (//src/teleop/quest_app),
+# publishing controller state to ROS and sending the gripper pose back.
+#   bazel run //src/teleop/quest_bridge                  # listen on :9090
+#   bazel test //src/teleop/quest_bridge/...
+#   bazel run //src/teleop/quest_bridge:view             # RViz: headset view + TF + teleop target
+
+load("@pip_quest_bridge//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+py_library(
+    name = "protocol",
+    srcs = ["protocol.py"],
+)
+
+py_library(
+    name = "tf_tree",
+    srcs = ["tf_tree.py"],
+    deps = [":protocol"],
+)
+
+py_library(
+    name = "bridge",
+    srcs = ["bridge.py"],
+    deps = [
+        ":protocol",
+        ":tf_tree",
+        "@geometry_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@tf2_msgs//:py",
+        requirement("websockets"),
+    ],
+)
+
+py_binary(
+    name = "quest_bridge",
+    srcs = ["quest_bridge.py"],
+    deps = [":bridge"],
+)
+
+py_test(
+    name = "protocol_test",
+    size = "small",
+    srcs = ["protocol_test.py"],
+    deps = [":protocol"],
+)
+
+py_test(
+    name = "tf_tree_test",
+    size = "small",
+    srcs = ["tf_tree_test.py"],
+    deps = [":tf_tree"],
+)
+
+# Own ROS domain so a running sim or bridge on this machine can't interfere.
+py_test(
+    name = "quest_bridge_test",
+    size = "small",
+    srcs = ["quest_bridge_test.py"],
+    env = {"ROS_DOMAIN_ID": "57"},
+    deps = [":bridge"],
+)
+
+# @pip_quest_bridge: bazel run //src/teleop/quest_bridge:requirements.update after editing requirements.in.
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.in",
+    requirements_txt = "requirements_lock.txt",
+)
+
+# RViz with the headset view (/quest/view/image_raw/compressed), the robot model, TF and /teleop/target_pose.
+py_data_library(
+    name = "rviz2",
+    src = "@rviz2//:rviz2",
+)
+
+py_data_library(
+    name = "quest_view_rviz_config",
+    src = "config/quest_view.rviz",
+)
+
+py_binary(
+    name = "view",
+    srcs = ["view.py"],
+    # The compressed image_transport plugin, for the JPEG view; the URDF parser plugin for the
+    # RobotModel display: meshes are package:// URIs in /robot_description (the reBot's and the
+    # Gemini 305's), resolved here, so the simulation can run on another machine.
+    data = [
+        "@compressed_image_transport//:ament_index",
+        "@orbbec_description//:ament_index",
+        "@rebot_arm_description//:ament_index",
+        "@urdf//:ament_index",
+        "@urdf_parser_plugin//:ament_index",
+    ],
+    deps = [
+        ":quest_view_rviz_config",
+        ":rviz2",
+    ],
+)

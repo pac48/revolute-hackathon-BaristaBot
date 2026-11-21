@@ -1,0 +1,50 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+# The scene camera of scene.xml (//src/camera_models/usb_camera attached with prefix scene_): one Xform per
+# MJCF body at its world pose, the MJCF camera scene_color as a USD camera (fovy 60 at 16:9) and its
+# RenderProduct. Keep in step with the <frame> in mjcf/scene.xml (rebot_arm_gemini_305_usd_test checks it).
+
+def Xform "World"
+{
+    def Xform "scene_camera_link"
+    {
+        matrix4d xformOp:transform = ( (-0.822199, 0, -0.5692, 0), (0, -1, 0, 0), (-0.5692, 0, 0.822199, 0), (0.9, 0, 0.6, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Cube "visual0"
+        {
+            double size = 1
+            float3 xformOp:scale = (0.02, 0.06, 0.04)
+            uniform token[] xformOpOrder = ["xformOp:scale"]
+            color3f[] primvars:displayColor = [(0.15, 0.15, 0.15)]
+        }
+    }
+    def Xform "scene_camera_optical_frame"
+    {
+        matrix4d xformOp:transform = ( (0, 1, 0, 0), (0.5692, 0, -0.822199, 0), (-0.822199, 0, -0.5692, 0), (0.9, 0, 0.6, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+        def Camera "scene_color"
+        {
+            matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, -1, 1.22465e-16, 0), (0, -1.22465e-16, -1, 0), (0, 0, 0, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+            float focalLength = 20.7846
+            float verticalAperture = 24
+            float horizontalAperture = 42.667
+            float2 clippingRange = (0.01, 100)
+        }
+    }
+}
+
+def Scope "Render"
+{
+    def RenderProduct "scene_color"
+    {
+        rel camera = </World/scene_camera_optical_frame/scene_color>
+        uniform int2 resolution = (1280, 720)
+        rel orderedVars = </Render/Vars/LdrColor>
+    }
+}

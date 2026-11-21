@@ -1,0 +1,7 @@
+bazel-*
+user.bazelrc
+.bazelrc.cache
+.clwb/
+**/spheres.obj
+**/spheres.mtl
+/outputs/

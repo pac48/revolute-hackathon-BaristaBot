@@ -1,0 +1,8 @@
+start_time_ is assigned from high_resolution_clock, which is system_clock in
+libstdc++ but steady_clock in libc++ (the RCR toolchain); use its own type.
+
+--- a/include/orbbec_camera/ob_camera_node_driver.h
++++ b/include/orbbec_camera/ob_camera_node_driver.h
+@@ -145 +145 @@
+-  std::chrono::time_point<std::chrono::system_clock> start_time_;
++  std::chrono::high_resolution_clock::time_point start_time_;

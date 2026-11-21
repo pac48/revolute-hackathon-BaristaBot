@@ -1,0 +1,3 @@
+# Local patches to the usb_cam module (applied by single_version_override in
+# MODULE.bazel). Remove each once fixed upstream.
+exports_files(glob(["*.patch"]))

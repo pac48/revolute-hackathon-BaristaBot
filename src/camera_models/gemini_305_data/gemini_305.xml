@@ -1,0 +1,54 @@
+<mujoco model="gemini_305">
+  <!-- Orbbec Gemini 305: the rigid body (mounting screws, color cameras) from
+       orbbec_description's gemini_305 URDF, as MuJoCo bodies. The URDF is generated
+       from this file (BUILD.bazel). Frame names are the driver's (orbbec_camera, camera
+       name "camera"): the driver publishes camera_link and below from the device
+       calibration; the bottom screw that parents camera_link is the model's.
+       Meshes: orbbec_description's gemini305 STLs, in meshes/gemini305/ (orbbec_description's own layout). -->
+  <compiler meshdir="meshes" angle="degree"/>
+
+  <asset>
+    <mesh name="bottom_screw" file="gemini305/camera_bottom_screw.STL"/>
+    <mesh name="rear_screw_r" file="gemini305/camera_rear_screw_R.STL"/>
+    <mesh name="rear_screw_l" file="gemini305/camera_rear_screw_L.STL"/>
+    <mesh name="rgb_l" file="gemini305/RGB_L.STL"/>
+    <mesh name="rgb_r" file="gemini305/RGB_R.STL"/>
+    <material name="steel" rgba="0.631 0.686 0.749 1"/>
+    <material name="screw" rgba="1 1 0.945 1"/>
+    <material name="rgb" rgba="0.957 0.047 0.875 1"/>
+  </asset>
+
+  <!-- No <default> here, and every geom says what it is: when this model is attached to
+       another (<attach>), a default in it leaks into the geoms the parent declares after the
+       attach (the reBot's gripper meshes got this model's quat). The STLs are exported with
+       their own axes: URDF rpy (pi, 0, pi/2) = quat 0 s s 0. -->
+
+  <worldbody>
+    <body name="camera_bottom_screw">
+      <geom type="mesh" contype="0" conaffinity="0" quat="0 0.70710678 0.70710678 0" mesh="bottom_screw" material="steel"/>
+      <body name="camera_rear_screw_R" pos="-0.01091969797964 -0.0100031936844311 0.0209990315919259">
+        <geom type="mesh" contype="0" conaffinity="0" quat="0 0.70710678 0.70710678 0" mesh="rear_screw_r" material="screw"/>
+      </body>
+      <body name="camera_rear_screw_L" pos="-0.01091969797964 0.00999680631556896 0.0209990315919259">
+        <geom type="mesh" contype="0" conaffinity="0" quat="0 0.70710678 0.70710678 0" mesh="rear_screw_l" material="screw"/>
+      </body>
+      <body name="camera_link" pos="0.008126703388352 0.008999999999889 0.0210000000000001">
+        <body name="camera_left_color_frame">
+          <geom type="mesh" contype="0" conaffinity="0" quat="0 0.70710678 0.70710678 0" mesh="rgb_l" material="rgb"/>
+          <!-- ROS optical frame: +Z forward, +X right, +Y down (URDF rpy -pi/2 0 -pi/2).
+               MuJoCo cameras look along -Z with +Y up, hence the 180 degrees about X.
+               Optics are nominal, not the device's calibration (the driver's camera_info). -->
+          <body name="camera_left_color_optical_frame" quat="0.5 -0.5 0.5 -0.5">
+            <camera name="left_color" euler="180 0 0" resolution="1280 720" fovy="65"/>
+          </body>
+          <body name="camera_right_color_frame" pos="0 -0.018 0">
+            <geom type="mesh" contype="0" conaffinity="0" quat="0 0.70710678 0.70710678 0" mesh="rgb_r" material="rgb"/>
+            <body name="camera_right_color_optical_frame" quat="0.5 -0.5 0.5 -0.5">
+              <camera name="right_color" euler="180 0 0" resolution="1280 720" fovy="65"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

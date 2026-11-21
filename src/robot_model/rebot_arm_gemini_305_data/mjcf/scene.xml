@@ -1,0 +1,35 @@
+<mujoco model="rebot_arm_gemini_305">
+  <!-- The arm (rs_arm.xml) with the Gemini 305 attached at its wrist: rs_arm.xml includes
+       wrist_camera.xml, which attaches the model declared here. Plus a light, MuJoCo's usual
+       checker floor (a plane at z = 0 that the arm's base stands on) and a scene camera. -->
+  <asset>
+    <model name="gemini_305" file="gemini_305.xml"/>
+    <model name="usb_camera" file="usb_camera.xml"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1=".1 .2 .3" rgb2=".2 .3 .4" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+  </asset>
+
+  <include file="rs_arm.xml"/>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 .05" type="plane" material="grid"/>
+<!--    <geom name="cube_neg_y" type="box" size=".3 .3 .3" pos="0 -.5 0.3" rgba="1 0 0 1"/>-->
+<!--    <geom name="cube_neg_x" type="box" size=".3 .3 .3" pos="-.65 0 0.3" rgba="0 0 1 1"/>-->
+<!--    <geom name="power_supply" type="box" size=".08 .16 .04" pos="-.0 .35 0.02" rgba="1 0 0 1"/>-->
+<!--    <geom name="laptop" type="box" size=".2 .2 .2" pos="0.4 .6 0.1" rgba="1 0 0 1"/>-->
+    <!-- A 4 cm, 50 g cube to grasp (the gripper opens to ~12 cm), resting on the floor in front of
+         the arm, in view of the scene camera. Free joint "cube_free". -->
+    <body name="cube" pos="0.3 0 0.02">
+      <freejoint name="cube_free"/>
+      <geom name="cube" type="box" size=".02 .02 .02" mass=".05" friction="1 .005 .0001" rgba=".9 .5 .1 1"/>
+    </body>
+    <!-- Scene camera (//src/camera_models/usb_camera, like the real setup's usb_cam): fixed in front of
+         the arm, looking back at the workspace (its x axis from (0.9, 0, 0.6) toward (0.25, 0, 0.15)).
+         Bodies scene_camera_link and scene_camera_optical_frame, MuJoCo camera scene_color. A nominal
+         pose: set it to the real camera's when that is measured. -->
+    <frame pos="0.9 0 0.6" xyaxes="-0.8222 0 -0.5692 0 -1 0">
+      <attach model="usb_camera" body="camera_link" prefix="scene_"/>
+    </frame>
+  </worldbody>
+</mujoco>

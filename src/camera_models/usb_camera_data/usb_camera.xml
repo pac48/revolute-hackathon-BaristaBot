@@ -1,0 +1,16 @@
+<mujoco model="usb_camera">
+  <!-- A generic USB (UVC) camera, as streamed by the usb_cam driver: a box body and one
+       camera. The optics are nominal (a typical 60 degree vertical field of view), not any
+       particular device's calibration. The URDF is generated from this file (BUILD.bazel).
+       Frames: camera_link is the body, camera_optical_frame the ROS optical frame
+       (+Z forward, +X right, +Y down) images are stamped with. MuJoCo cameras look along
+       -Z with +Y up, hence the 180 degrees about X. -->
+  <worldbody>
+    <body name="camera_link">
+      <geom type="box" size="0.01 0.03 0.02" rgba="0.15 0.15 0.15 1" contype="0" conaffinity="0"/>
+      <body name="camera_optical_frame" quat="0.5 -0.5 0.5 -0.5">
+        <camera name="color" euler="180 0 0" resolution="1280 720" fovy="60"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,0 +1,168 @@
+# ros2 command-line tools (ros2cli from the RCR):
+#   bazel run //tools/ros2:shell                       # a bash with ros2 on PATH (fast)
+#   bazel run //tools/ros2 -- topic list              (also `control list_controllers` etc.)
+#   bazel run //tools/ros2 -- topic hz /camera/left_color/image_raw/compressed
+#   bazel run //tools/ros2.remote -- node list       # on the remote build host
+# Like every bazel-run ROS process here it uses this shell's ROS_DOMAIN_ID (the
+# remote gets none over ssh, i.e. domain 0) and .bazelrc's DDS settings.
+
+load("@pip_ros2_tools//:requirements.bzl", "requirement")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+# Verbs: one ros2cli package each.
+VERBS = [
+    "@ros2action",
+    "@ros2component",
+    "@ros2controlcli",
+    "@ros2doctor",
+    "@ros2interface",
+    "@ros2lifecycle",
+    "@ros2multicast",
+    "@ros2node",
+    "@ros2param",
+    "@ros2pkg",
+    "@ros2run",
+    "@ros2service",
+    "@ros2topic",
+]
+
+# Interface packages whose types the tools can echo/call/show (their Python
+# message modules, and their ament index entries for `ros2 interface`). Add a
+# package here when a new one appears on the robot.
+INTERFACES = [
+    "action_msgs",
+    "builtin_interfaces",
+    "control_msgs",
+    "controller_manager_msgs",
+    "diagnostic_msgs",
+    "geometry_msgs",
+    "lifecycle_msgs",
+    "orbbec_camera_msgs",
+    "rcl_interfaces",
+    "rosgraph_msgs",
+    "sensor_msgs",
+    "statistics_msgs",
+    "std_msgs",
+    "std_srvs",
+    "tf2_msgs",
+    "trajectory_msgs",
+]
+
+# These RCR packages ship without their egg-info entry points, so ros2cli
+# wouldn't find their commands; generate it from each setup.py (egg_info.py).
+# (ros2cli, ros2doctor, ros2interface, ros2pkg and ros2topic ship theirs.)
+MISSING_ENTRY_POINTS = [
+    "ros2action",
+    "ros2component",
+    "ros2lifecycle",
+    "ros2multicast",
+    "ros2node",
+    "ros2param",
+    "ros2run",
+    "ros2service",
+]
+
+py_binary(
+    name = "egg_info_tool",
+    srcs = ["egg_info.py"],
+    main = "egg_info.py",
+)
+
+[genrule(
+    name = pkg + "_egg_info",
+    srcs = ["@{}//:setup.py".format(pkg)],
+    outs = [
+        "egg_info/{}.egg-info/PKG-INFO".format(pkg),
+        "egg_info/{}.egg-info/entry_points.txt".format(pkg),
+    ],
+    cmd = "$(execpath :egg_info_tool) $< $(RULEDIR)/egg_info/{}.egg-info".format(pkg),
+    tools = [":egg_info_tool"],
+) for pkg in MISSING_ENTRY_POINTS]
+
+# ros2controlcli doesn't export its setup.py, so its entry points are written out
+# here (from its setup.py: the `control` command and one verb per module).
+CONTROL_VERBS = {
+    "list_controllers": "ListControllersVerb",
+    "view_controller_chains": "ViewControllerChainsVerb",
+    "list_hardware_components": "ListHardwareComponentsVerb",
+    "list_hardware_interfaces": "ListHardwareInterfacesVerb",
+    "list_controller_types": "ListControllerTypesVerb",
+    "load_controller": "LoadControllerVerb",
+    "reload_controller_libraries": "ReloadControllerLibrariesVerb",
+    "set_controller_state": "SetControllerStateVerb",
+    "set_hardware_component_state": "SetHardwareComponentStateVerb",
+    "switch_controllers": "SwitchControllersVerb",
+    "unload_controller": "UnloadControllerVerb",
+    "cleanup_controller": "CleanupControllerVerb",
+    "view_hardware_status": "ViewHardwareStatusVerb",
+}
+
+genrule(
+    name = "ros2controlcli_egg_info",
+    outs = [
+        "egg_info/ros2controlcli.egg-info/PKG-INFO",
+        "egg_info/ros2controlcli.egg-info/entry_points.txt",
+    ],
+    cmd = "printf 'Metadata-Version: 2.1\\nName: ros2controlcli\\nVersion: 6.10.1\\n' > $(location egg_info/ros2controlcli.egg-info/PKG-INFO) && " +
+          "printf '%s\\n' '[ros2cli.command]' 'control = ros2controlcli.command.control:ControlCommand' '' '[ros2controlcli.verb]' " +
+          " ".join(["'{} = ros2controlcli.verb.{}:{}'".format(v, v, c) for v, c in CONTROL_VERBS.items()]) +
+          " > $(location egg_info/ros2controlcli.egg-info/entry_points.txt)",
+)
+
+py_library(
+    name = "entry_points",
+    data = [":{}_egg_info".format(pkg) for pkg in MISSING_ENTRY_POINTS + ["ros2controlcli"]],
+    imports = ["egg_info"],
+)
+
+py_binary(
+    name = "ros2",
+    srcs = ["ros2.py"],
+    data = ["@{}//:ament_index".format(pkg) for pkg in INTERFACES],
+    # (ros2doctor's platform/package checks need the `rosdistro` pip package,
+    # which @pip_ros doesn't have; doctor skips them with a warning.)
+    deps = ["@ros2cli", ":entry_points"] + VERBS + ["@{}//:py".format(pkg) for pkg in INTERFACES] + [
+        "@controller_manager//:controller_manager_py",  # imported by ros2controlcli
+        requirement("graphviz"),
+        requirement("argcomplete"),  # newer than @pip_ros's; see ros2.py
+    ],
+)
+
+py_test(
+    name = "egg_info_test",
+    size = "small",
+    srcs = ["egg_info_test.py"],
+    deps = [":egg_info_tool"],
+)
+
+# Bash completion for ros2 (ros2cli registers argcomplete).
+py_binary(
+    name = "argcomplete_shellcode",
+    srcs = ["argcomplete_shellcode.py"],
+    deps = [requirement("argcomplete")],
+)
+
+genrule(
+    name = "ros2_completion",
+    outs = ["ros2_completion.bash"],
+    cmd = "$(execpath :argcomplete_shellcode) ros2 > $@",
+    tools = [":argcomplete_shellcode"],
+)
+
+# A bash with `ros2` on PATH: bazel run //tools/ros2:shell (see shell.py).
+py_binary(
+    name = "shell",
+    srcs = ["shell.py"],
+    data = [
+        ":ros2",
+        ":ros2_completion",
+    ],
+)
+
+# @pip_ros2_tools: bazel run //tools/ros2:requirements.update after editing requirements.in.
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.in",
+    requirements_txt = "requirements_lock.txt",
+)

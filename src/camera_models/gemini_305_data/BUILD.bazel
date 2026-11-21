@@ -1,0 +1,73 @@
+# Orbbec Gemini 305 model data: MJCF (bodies, meshes, cameras) and the URDF generated
+# from it, with no ROS and no code. Meshes are orbbec_description's STLs. Functionality
+# built on these files is in ../gemini_305.
+# Each file is a py_data_library:
+#   from src.camera_models.gemini_305_data import mjcf, urdf; urdf.path()
+
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+package(default_visibility = ["//visibility:public"])
+
+MESHES = [
+    "camera_bottom_screw.STL",
+    "camera_rear_screw_L.STL",
+    "camera_rear_screw_R.STL",
+    "RGB_L.STL",
+    "RGB_R.STL",
+]
+
+# gemini_305.xml loads these from meshes/gemini305/ next to it (<compiler meshdir>).
+genrule(
+    name = "meshes_gen",
+    srcs = ["@orbbec_description//:meshes"],
+    outs = ["meshes/gemini305/" + m for m in MESHES],
+    cmd = "for f in $(SRCS); do case $$f in */meshes/gemini305/*) cp $$f $(RULEDIR)/meshes/gemini305/;; esac; done",
+)
+
+exports_files(["gemini_305.xml"])
+
+# Simplified USD stand-in for the camera: an Xform per MJCF body, the MJCF cameras and their
+# RenderProducts. Prims correspond to the MJCF (see ../robot_model/rebot_arm_gemini_305_data).
+filegroup(
+    name = "usd",
+    srcs = ["gemini_305.usda"],
+)
+
+# MuJoCo MJCF: bodies, visual meshes and cameras. The single source of truth for the
+# model; the URDF below is generated from it. Its runfiles include the meshes.
+py_data_library(
+    name = "mjcf",
+    src = "gemini_305.xml",
+    data = [":meshes_gen"],
+)
+
+# URDF generated from the MJCF: links, fixed joints, and the meshes as orbbec_description's
+# package:// URIs (what RViz's RobotModel display resolves). mjcf_to_urdf compiles the MJCF
+# with MuJoCo, so the xml and its meshes are staged side by side.
+genrule(
+    name = "urdf_gen",
+    srcs = [
+        "gemini_305.xml",
+        ":meshes_gen",
+    ],
+    outs = ["gemini_305.urdf"],
+    cmd = "d=$$(mktemp -d) && mkdir -p $$d/meshes/gemini305 && cp $(execpath gemini_305.xml) $$d/ && " +
+          "cp $(execpaths :meshes_gen) $$d/meshes/gemini305/ && " +
+          "$(execpath //src/robot_model/mjcf_to_urdf) " +
+          "--mesh-prefix package://orbbec_description/meshes/ $$d/gemini_305.xml $@",
+    tools = ["//src/robot_model/mjcf_to_urdf"],
+)
+
+py_data_library(
+    name = "urdf",
+    src = "gemini_305.urdf",
+)
+
+filegroup(
+    name = "model",
+    srcs = [
+        "gemini_305.urdf",
+        "gemini_305.xml",
+        ":meshes_gen",
+    ],
+)

@@ -1,0 +1,30 @@
+# The Gemini 305's two color cameras (MJCF cameras left_color and right_color), rendered and
+# published by mujoco_ros2_control_plugins' CameraPlugin. Loaded in addition to controllers.yaml.
+# Topics and frames are the real driver's (//src/camera_drivers:orbbec_camera).
+mujoco_ros2_control_node:
+  ros__parameters:
+    mujoco_plugins:
+      mujoco_camera_plugin:
+        type: mujoco_ros2_control_plugins/CameraPlugin
+        # All cameras publish at this rate (Hz); the plugin's default is 5. Images are rendered on
+        # the simulation's steps, so the rate achieved is lower than this: 45 gives ~39 FPS for
+        # both 1280x720 cameras (30 gives ~25). A subscriber must be RELIABLE to get them: the
+        # 2.7 MB samples are lost over UDP to a best-effort one (~1 FPS).
+        camera_publish_rate: 45.0
+        left_color:
+          frame_name: camera_left_color_optical_frame
+          info_topic: /camera/left_color/camera_info
+          image_topic: /camera/left_color/image_raw
+          depth_topic: /camera/left_color/depth/image_raw
+        right_color:
+          frame_name: camera_right_color_optical_frame
+          info_topic: /camera/right_color/camera_info
+          image_topic: /camera/right_color/image_raw
+          depth_topic: /camera/right_color/depth/image_raw
+        # The scene camera (MJCF scene_color; a USB camera on the real setup, which has no depth: the
+        # plugin renders and publishes one anyway).
+        scene_color:
+          frame_name: scene_camera_optical_frame
+          info_topic: /scene_camera/camera_info
+          image_topic: /scene_camera/image_raw
+          depth_topic: /scene_camera/depth/image_raw

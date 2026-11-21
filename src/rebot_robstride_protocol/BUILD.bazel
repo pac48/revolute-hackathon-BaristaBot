@@ -1,0 +1,49 @@
+# Manual checks of the reBot Arm RS CAN driver (@rebot_arm_rs_ros2//:rebot_robstride_protocol) on real hardware.
+#
+# hardware_test: configures the RobStride protocol for joint1..joint6 and the gripper protocol for joint7 (in m), reads the initial states,
+# ENABLES the motors (they hold their position), reads the state a few times, prints it, and disables
+# them again. Run it on the machine that has the CAN adapter (e.g. the remote build host):
+#
+#   bazel test //src/rebot_robstride_protocol:hardware_test.remote --test_output=all
+#   bazel test //src/rebot_robstride_protocol:hardware_test.remote --test_output=all --test_arg=can1
+#
+# The first argument is the SocketCAN interface (default can0, or $CAN_INTERFACE); --no-gripper skips motor 7. Bring the interface
+# up first: `sudo ip link set can0 up type can bitrate 1000000`. It is tagged manual, so
+# `bazel test //src/...` skips it.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+
+# gripper_zero: sets the gripper motor's zero once, at its closed stop (zero range 0..2pi, zero here, saved to the
+# motor). Read-only unless --write; close the gripper by hand first.
+#   bazel run //src/rebot_robstride_protocol:gripper_zero.remote -- can0            # watch the angle (dry run)
+#   bazel run //src/rebot_robstride_protocol:gripper_zero.remote -- can0 --write
+cc_binary(
+    name = "gripper_zero",
+    srcs = ["gripper_zero.cpp"],
+    tags = ["manual"],
+    deps = [
+        "@rebot_arm_rs_ros2//:rebot_robstride_protocol_library",
+        "@shared_can_hardware//:shared_can_ros2_transport",
+    ],
+)
+
+cc_test(
+    name = "hardware_test",
+    size = "small",
+    srcs = ["hardware_test.cpp"],
+    env_inherit = ["CAN_INTERFACE"],
+    # Needs the host's network namespace (the CAN interface), so no sandbox; never cached.
+    tags = [
+        "exclusive",
+        "external",
+        "local",
+        "manual",
+        "no-sandbox",
+        "requires-network",
+    ],
+    deps = [
+        "@rebot_arm_rs_ros2//:rebot_robstride_protocol_library",
+        "@shared_can_hardware//:shared_can_ros2_readiness",
+        "@shared_can_hardware//:shared_can_ros2_transport",
+    ],
+)

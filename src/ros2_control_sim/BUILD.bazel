@@ -1,0 +1,453 @@
+# Prototype: ros2_control controller_manager driving a robot model simulated in
+# mujoco_ros2_control. `bazel run //src/ros2_control_sim:mujoco_arm_sim -- --model rebot_arm`
+#
+# The robot models live in //src/robot_model; each model package renders its own
+# robot_description (URDF + <ros2_control> block). This package holds only the
+# ROS side: per-model controller config (config/<model>/controllers.yaml), the
+# nodes and the launcher. Every file or executable the launcher needs is a
+# py_data_library (`from src.ros2_control_sim import spawner; spawner.run(...)`).
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+# ---- Controller config -------------------------------------------------------
+
+# controller_manager + controller parameters per model.
+py_data_library(
+    name = "two_link_arm_controllers",
+    src = "config/two_link_arm/controllers.yaml",
+)
+
+# The reBot configs, all generated from config/rebot_arm_shared.yaml (the one place to change their values) so
+# the sim and the real arm, one arm and two, run the same settings. Each is
+# bazel-bin/src/ros2_control_sim/config/<model>/<file>.yaml.
+py_binary(
+    name = "rebot_controller_config",
+    srcs = ["rebot_controller_config.py"],
+    deps = [requirement("pyyaml")],
+)
+
+[
+    (
+        genrule(
+            name = "gen_%s_%s" % (model, file),
+            srcs = ["config/rebot_arm_shared.yaml"],
+            outs = ["config/%s/%s.yaml" % (model, file)],
+            cmd = "$(execpath :rebot_controller_config) $(execpath config/rebot_arm_shared.yaml) $@ " + flags,
+            tools = [":rebot_controller_config"],
+        ),
+        py_data_library(
+            name = name,
+            src = ":gen_%s_%s" % (model, file),
+            visibility = ["//src/trajectory_generator:__pkg__"],  # mpc_reach: the controller's gains
+        ),
+    )
+    for name, model, file, flags in [
+        ("rebot_arm_controllers", "rebot_arm", "controllers", "--backend sim"),
+        ("rebot_dual_arm_gemini_305_controllers", "rebot_dual_arm_gemini_305", "controllers", "--backend sim --prefixes left_ right_"),
+        ("rebot_arm_real_controllers", "rebot_arm_real", "controllers", "--backend real"),
+        ("rebot_dual_arm_real_controllers", "rebot_dual_arm_real", "controllers", "--backend real --prefixes left_ right_"),
+        # The real grippers, added to the real controllers (a later params file).
+        ("rebot_arm_real_gripper", "rebot_arm_real", "gripper", "--backend real --gripper"),
+        ("rebot_dual_arm_real_gripper", "rebot_dual_arm_real", "gripper", "--backend real --gripper --prefixes left_ right_"),
+    ]
+]
+
+# Camera plugin parameters (extra params file) of the models with simulated cameras.
+py_data_library(
+    name = "rebot_arm_gemini_305_cameras",
+    src = "config/rebot_arm_gemini_305/cameras.yaml",
+)
+
+py_data_library(
+    name = "rebot_dual_arm_gemini_305_cameras",
+    src = "config/rebot_dual_arm_gemini_305/cameras.yaml",
+)
+
+# load() / controller_names() / command_interfaces() for a controllers.yaml.
+py_library(
+    name = "controller_config",
+    srcs = ["controller_config.py"],
+    visibility = ["//src/trajectory_generator:__pkg__"],
+    deps = [requirement("pyyaml")],
+)
+
+# Model registry: name -> robot description + controller config.
+py_library(
+    name = "models",
+    srcs = ["models.py"],
+    deps = [
+        ":controller_config",
+        ":rebot_arm_controllers",
+        ":rebot_arm_gemini_305_cameras",
+        ":rebot_dual_arm_gemini_305_cameras",
+        ":rebot_dual_arm_gemini_305_controllers",
+        ":two_link_arm_controllers",
+        "//src/robot_model/rebot_arm:description",
+        "//src/robot_model/rebot_arm_gemini_305:description",
+        "//src/robot_model/rebot_dual_arm_gemini_305:description",
+        "//src/robot_model/two_link_arm:description",
+    ],
+)
+
+# ---- Executables -------------------------------------------------------------
+
+# The mujoco_ros2_control controller manager node. The controller plugins the
+# configs reference ride along so pluginlib can find them.
+py_data_library(
+    name = "ros2_control_node",
+    src = "@mujoco_ros2_control//:ros2_control_node",
+    data = [
+        "//src/controllers/joint_impedance_controller:ament_index",
+        "//src/ros2_control_sim/mit_system_interface:ament_index",
+        "@joint_trajectory_controller//:ament_index",
+        "@joint_state_broadcaster//:ament_index",
+        "@mujoco_ros2_control//:ament_index",
+        "@mujoco_ros2_control_plugins//:ament_index",
+    ],
+)
+
+# The controller manager with the real hardware's plugins (shared_can_ros2/CanSystem, its SocketCAN
+# transport and the rebot_robstride_protocol protocols; real_arm.py).
+py_data_library(
+    name = "real_ros2_control_node",
+    src = "@controller_manager//:ros2_control_node",
+    data = [
+        "//src/controllers/joint_impedance_controller:ament_index",
+        "@controller_manager//:ament_index",
+        "@hardware_interface//:ament_index",  # mock_components, for tests
+        "@joint_state_broadcaster//:ament_index",
+        "@rebot_arm_rs_ros2//:ament_index",
+        "@shared_can_hardware//:ament_index",
+        "@shared_can_hardware//:shared_can_interface_ament_index",
+        "@shared_can_hardware//:socketcan_ament_index",
+    ],
+)
+
+py_data_library(
+    name = "robot_state_publisher",
+    src = "@robot_state_publisher//:robot_state_publisher",
+)
+
+py_data_library(
+    name = "spawner",
+    src = "@controller_manager//:spawner",
+)
+
+# ---- Real robot ---------------------------------------------------------------
+
+# Teleop's command stream at the real driver, holding the measured positions (nothing moves), and the rates it sees:
+# bazel run //src/ros2_control_sim:hold_load_diagnostic[.remote] -- --rate 200
+py_binary(
+    name = "hold_load_diagnostic",
+    srcs = ["hold_load_diagnostic.py"],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@control_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+        requirement("numpy"),
+    ],
+)
+
+# The real arm's driver: bazel run //src/ros2_control_sim:real_arm[.remote] -- --model rebot_arm_gemini_305
+py_library(
+    name = "real",
+    srcs = ["real.py"],
+    deps = [
+        ":controller_config",
+        ":rebot_arm_real_controllers",
+        ":rebot_arm_real_gripper",
+        ":rebot_dual_arm_real_controllers",
+        ":rebot_dual_arm_real_gripper",
+        ":real_ros2_control_node",
+        ":robot_state_publisher",
+        ":spawner",
+        "//src/robot_model/rebot_arm:description",
+        "//src/robot_model/rebot_arm_gemini_305:description",
+        "//src/robot_model/rebot_dual_arm_gemini_305:description",
+    ],
+)
+
+py_binary(
+    name = "real_arm",
+    srcs = ["real_arm.py"],
+    main = "real_arm.py",
+    deps = [
+        ":real",
+        "//src/robot_model/active_model",
+    ],
+)
+
+# End-to-end on ros2_control's mock hardware (no CAN): the real arm's controller config (with the gripper)
+# activates and drives all 7 joints, the gripper by position.
+py_test(
+    name = "real_mock_test",
+    size = "small",
+    srcs = ["real_mock_test.py"],
+    deps = [
+        ":real",
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+py_test(
+    name = "real_test",
+    size = "small",
+    srcs = ["real_test.py"],
+    deps = [
+        ":controller_config",
+        ":models",
+        ":real",
+    ],
+)
+
+# ---- Launcher ----------------------------------------------------------------
+
+# Simulation context manager shared by the launcher and the end-to-end tests.
+py_library(
+    name = "sim",
+    srcs = ["sim.py"],
+    deps = [
+        ":controller_config",
+        ":models",
+        ":robot_state_publisher",
+        ":ros2_control_node",
+        ":spawner",
+    ],
+)
+
+py_binary(
+    name = "mujoco_arm_sim",
+    srcs = ["run_sim.py"],
+    main = "run_sim.py",
+    deps = [
+        ":models",
+        ":sim",
+        "//src/robot_model/active_model",
+    ],
+)
+
+# Point-to-point trajectory latency against a local sim and the remote build
+# host's sim (tools/remote), to see what the remote setup adds.
+# `bazel run //src/ros2_control_sim:latency_diagnostic -- --model rebot_arm`
+py_binary(
+    name = "latency_diagnostic",
+    srcs = ["latency_diagnostic.py"],
+    deps = [
+        ":models",
+        ":sim",
+        "//src/robot_model/active_model",
+        "//src/trajectory_generator:client",
+        "@rclpy",
+    ],
+)
+
+# ---- Tests -------------------------------------------------------------------
+
+py_test(
+    name = "models_test",
+    size = "small",
+    srcs = ["models_test.py"],
+    deps = [
+        ":controller_config",
+        ":models",
+    ],
+)
+
+# Tests whose pass/fail depends on the reBot's controller gains (how closely the arm tracks) are tagged manual:
+# regression tests to run by hand after a gain change, e.g.
+#   bazel test //src/ros2_control_sim:rebot_arm_sim_test //src/ros2_control_sim:rebot_arm_cartesian_test
+# End-to-end, one per model: sim, send a point-to-point trajectory with the
+# trajectory_generator client, check the joints reach the goal. The fast way to check a change works (a few seconds).
+# <model>_sim_test runs headless; <model>_viewer_test opens the MuJoCo viewer, so
+# it needs a display and is manual: `bazel test //src/ros2_control_sim:rebot_arm_viewer_test`.
+[
+    py_test(
+        name = model + ("_viewer_test" if viewer else "_sim_test"),
+        size = "small",
+        srcs = ["mujoco_arm_sim_test.py"],
+        env = {
+            "SIM_MODEL": model,
+            "SIM_VIEWER": "1" if viewer else "0",
+        },
+        env_inherit = ["DISPLAY", "XAUTHORITY"] if viewer else [],
+        main = "mujoco_arm_sim_test.py",
+        # The variants share one source; precompiling it per target would emit
+        # the same .pyc from conflicting actions.
+        precompile = "disabled",
+        # The reBot variants track with config/rebot_arm_shared.yaml's gains: manual regression tests (see below).
+        tags = ["manual", "local"] if viewer else ["manual"] if model.startswith("rebot") else [],
+        deps = [
+            ":models",
+            ":sim",
+            "//src/trajectory_generator:client",
+            "@rclpy",
+        ],
+    )
+    for model in [
+        "rebot_arm",
+        "rebot_arm_gemini_305",
+        "rebot_dual_arm_gemini_305",
+        "two_link_arm",
+    ]
+    for viewer in [False, True]
+]
+
+# End-to-end: /mujoco_state carries the whole MuJoCo state (the scene's cube too) and /set_mujoco_state sets it.
+py_test(
+    name = "mujoco_state_test",
+    size = "small",
+    srcs = ["mujoco_state_test.py"],
+    deps = [
+        ":models",
+        ":sim",
+        "//src/mujoco_state_msgs:py",
+        "@rclpy",
+    ],
+)
+
+# End-to-end: the reBot follows a motion-planned path (VAMP) around a virtual obstacle.
+py_test(
+    name = "rebot_arm_plan_test",
+    size = "small",
+    srcs = ["rebot_arm_plan_test.py"],
+    tags = ["manual"],  # regression: tracking depends on the controller gains
+    deps = [
+        ":sim",
+        "//src/trajectory_generator:client",
+        "@rclpy",
+    ],
+)
+
+# End-to-end: the reBot's arm under joint impedance control follows a joint trajectory message.
+py_test(
+    name = "rebot_arm_impedance_test",
+    size = "small",
+    srcs = ["rebot_arm_impedance_test.py"],
+    tags = ["manual"],  # regression: tracking depends on the controller gains
+    deps = [
+        ":sim",
+        "@builtin_interfaces//:py",
+        "@control_msgs//:py",
+        "@controller_manager_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+# End-to-end: the dual-arm teleop drives the two simulated arms, one hand each, and Ctrl-C sends both home.
+py_test(
+    name = "rebot_dual_arm_teleop_test",
+    size = "medium",
+    srcs = ["rebot_dual_arm_teleop_test.py"],
+    tags = ["manual"],  # regression: tracking depends on the controller gains
+    deps = [
+        ":sim",
+        ":teleop_node",
+        "//src/trajectory_generator:cartesian_demo",
+        "//src/trajectory_generator:cartesian_path",
+        "//src/trajectory_generator:client",
+        "@geometry_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+# How closely the sim follows setpoints streamed like the teleop node does, per model variant.
+py_binary(
+    name = "teleop_tracking_diagnostic",
+    srcs = ["teleop_tracking_diagnostic.py"],
+    deps = [
+        ":models",
+        ":sim",
+        "//src/robot_model/rebot_arm:description",
+        "@builtin_interfaces//:py",
+        "@control_msgs//:py",
+        "@rclpy",
+        "@rosgraph_msgs//:py",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+# How still the arm is at a stationary target (joint state variation); see the docstring.
+py_binary(
+    name = "stationary_diagnostic",
+    srcs = ["stationary_diagnostic.py"],
+    deps = [
+        ":models",
+        ":sim",
+        "//src/robot_model/active_model",
+        "@builtin_interfaces//:py",
+        "@trajectory_msgs//:py",
+        requirement("numpy"),
+        "@rclpy",
+        "@sensor_msgs//:py",
+    ],
+)
+
+# End-to-end: the simulated camera's images come at 30 FPS or better.
+py_test(
+    name = "rebot_arm_gemini_305_camera_test",
+    size = "small",
+    srcs = ["rebot_arm_gemini_305_camera_test.py"],
+    deps = [
+        ":sim",
+        "@rclpy",
+        "@rosgraph_msgs//:py",
+        "@sensor_msgs//:py",
+    ],
+)
+
+# End-to-end: the reBot's gripper follows straight lines (Cartesian path + dense IK).
+py_test(
+    name = "rebot_arm_cartesian_test",
+    size = "small",
+    srcs = ["rebot_arm_cartesian_test.py"],
+    tags = ["manual"],  # regression: tracking depends on the controller gains
+    deps = [
+        ":sim",
+        "//src/trajectory_generator:cartesian_demo",
+        "//src/trajectory_generator:cartesian_path",
+        "//src/trajectory_generator:client",
+        "//src/trajectory_generator:kinematics_client",
+        "@rclpy",
+        "@sensor_msgs//:py",
+    ],
+)
+
+# The clutched VR teleop node (C++), for rebot_arm_teleop_test.
+py_data_library(
+    name = "teleop_node",
+    src = "//src/teleop/controller:teleop",
+)
+
+# End-to-end: the teleop node follows a simulated headset (trigger clutch, ratcheting,
+# rotation, gripper) on the headless reBot sim.
+py_test(
+    name = "rebot_arm_teleop_test",
+    size = "medium",  # three sim sessions, ~60 s
+    srcs = ["rebot_arm_teleop_test.py"],
+    tags = ["manual"],  # regression: tracking depends on the controller gains
+    deps = [
+        ":sim",
+        ":teleop_node",
+        "//src/trajectory_generator:cartesian_demo",
+        "//src/trajectory_generator:cartesian_path",
+        "//src/trajectory_generator:client",
+        "//src/trajectory_generator:kinematics_client",
+        "@geometry_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)

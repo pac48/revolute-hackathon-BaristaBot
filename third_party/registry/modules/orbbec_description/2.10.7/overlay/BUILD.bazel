@@ -1,0 +1,40 @@
+# orbbec_description: camera URDF/xacro models and meshes (see third_party/registry/README.md).
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+
+# Apache-2.0 (package.xml); the license text is in the repository root, outside this module.
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["urdf/*.xacro"]))
+
+filegroup(
+    name = "meshes",
+    srcs = glob(["meshes/**"]),
+)
+
+filegroup(
+    name = "urdf",
+    srcs = glob(["urdf/*.xacro"]),
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":meshes",
+        ":urdf",
+        "rviz/urdf.rviz",
+        "//launch:launch_files",
+    ],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@launch_ros//:ament_package",
+        "@rosdistro//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)

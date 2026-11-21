@@ -1,0 +1,248 @@
+# orbbec_camera: the Orbbec camera ROS 2 driver (see third_party/registry/README.md).
+#
+# Builds the driver library + component (orbbec_camera::OBCameraNodeDriver), the
+# orbbec_camera_node executable and the device/profile listing tools, against
+# the prebuilt Orbbec SDK shipped in SDK/<arch>/ (a C API; its C++ API is
+# header-only). The Rockchip/Jetson decoders, examples and benchmarks are left out.
+#
+# At runtime the node finds the SDK config in share/orbbec_camera/config/ and the
+# SDK's extensions (depth engine, filters) in lib/extensions/ of its ament prefix.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_import", "cc_library", "cc_shared_library")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+# Apache-2.0 (package.xml); the license text is in the repository root, outside this module.
+package(default_visibility = ["//visibility:public"])
+
+# ---- Prebuilt Orbbec SDK ----
+
+SDK_ARCH = select({
+    "@platforms//cpu:aarch64": "arm64",
+    "//conditions:default": "x64",
+})
+
+cc_library(
+    name = "orbbec_sdk_headers",
+    hdrs = select({
+        "@platforms//cpu:aarch64": glob(["SDK/arm64/include/**"]),
+        "//conditions:default": glob(["SDK/x64/include/**"]),
+    }),
+    includes = select({
+        "@platforms//cpu:aarch64": ["SDK/arm64/include"],
+        "//conditions:default": ["SDK/x64/include"],
+    }),
+)
+
+cc_import(
+    name = "orbbec_sdk_import",
+    shared_library = select({
+        "@platforms//cpu:aarch64": "SDK/arm64/lib/libOrbbecSDK.so.2",
+        "//conditions:default": "SDK/x64/lib/libOrbbecSDK.so.2",
+    }),
+)
+
+cc_library(
+    name = "orbbec_sdk",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":orbbec_sdk_headers",
+        ":orbbec_sdk_import",
+    ],
+)
+
+# SDK extensions, installed as lib/extensions/** (dlopen()ed by the SDK).
+pkg_files(
+    name = "sdk_extensions",
+    srcs = select({
+        "@platforms//cpu:aarch64": glob(["SDK/arm64/lib/extensions/**"]),
+        "//conditions:default": glob(["SDK/x64/lib/extensions/**"]),
+    }),
+    prefix = "lib/extensions",
+    strip_prefix = select({
+        "@platforms//cpu:aarch64": strip_prefix.from_pkg("SDK/arm64/lib/extensions"),
+        "//conditions:default": strip_prefix.from_pkg("SDK/x64/lib/extensions"),
+    }),
+)
+
+# ---- Driver ----
+
+DEPENDENCIES = {
+    "@action_msgs//:cc_shared": "@action_msgs//:cc",
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@diagnostic_msgs//:cc_shared": "@diagnostic_msgs//:cc",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@image_publisher//:image_publisher": "@image_publisher//:image_publisher_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@orbbec_camera_msgs//:cc_shared": "@orbbec_camera_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl_interfaces//:cc_shared": "@rcl_interfaces//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:openssl": "@rosdistro//cc:openssl_crypto_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    ":orbbec_sdk",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+]
+
+# As upstream's CMake decides from the dependency versions (message_filters >= 5,
+# image_transport >= 6.4, camera_info_manager >= 4.1 and < 7).
+DEFINES = [
+    "ORBBEC_MESSAGE_FILTERS_USES_RCLCPP_QOS",
+    "ORBBEC_IMAGE_TRANSPORT_USES_REQUIRED_INTERFACES",
+    "ORBBEC_CAMERA_INFO_MANAGER_USES_NODE_INTERFACES",
+]
+
+COPTS = [
+    "-Wno-deprecated-declarations",
+    "-Wno-unused-parameter",
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+HEADERS = glob(
+    ["include/**/*.h", "include/**/*.hpp"],
+    exclude = [
+        "include/orbbec_camera/jetson_nv_decoder.h",
+        "include/orbbec_camera/rk_mpp_decoder.h",
+    ],
+)
+
+cc_library(
+    name = "orbbec_camera_library",
+    srcs = [
+        "src/d2c_viewer.cpp",
+        "src/dynamic_params.cpp",
+        "src/frame_timestamp_csv_logger.cpp",
+        "src/image_publisher.cpp",
+        "src/imu_timestamp_csv_logger.cpp",
+        "src/jpeg_decoder.cpp",
+        "src/ob_camera_node.cpp",
+        "src/ob_camera_node_driver.cpp",
+        "src/ob_lidar_node.cpp",
+        "src/ros_param_backend.cpp",
+        "src/ros_service.cpp",
+        "src/synced_imu_publisher.cpp",
+        "src/timestamp_csv_logger.cpp",
+        "src/utils.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    linkopts = ["-lrt"],
+    local_defines = ros_local_defines() + DEFINES,
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "orbbec_camera",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":orbbec_camera_library"],
+)
+
+rclcpp_components_register_node(
+    name = "orbbec_camera_node",
+    component = ":orbbec_camera",
+    data = [":ament_index"],
+    node_name = "orbbec_camera_node",
+    plugin = "orbbec_camera::OBCameraNodeDriver",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":orbbec_camera"],
+)
+
+[cc_binary(
+    name = name,
+    srcs = [src],
+    copts = COPTS,
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":orbbec_camera_library"],
+) for name, src in [
+    ("list_devices_node", "tools/list_devices_node.cpp"),
+    ("list_camera_profile_mode_node", "tools/list_camera_profile.cpp"),
+]]
+
+ament_index(
+    name = "ament_index",
+    components = [":orbbec_camera_node_record"],
+    data = glob(
+        ["config/**"],
+    ) + [
+        ":sdk_extensions",
+        "scripts/99-obsensor-libusb.rules",
+    ],
+    libraries = [
+        ":orbbec_camera",
+        ":orbbec_sdk_import",
+    ],
+    package_xml = "package.xml",
+    # Packages the node looks up at runtime (pluginlib: image_transport and its
+    # plugins; the SDK config and model files).
+    deps = [
+        "@camera_info_manager//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_publisher//:ament_package",
+        "@image_transport//:ament_package",
+        "@orbbec_camera_msgs//:ament_package",
+        "@orbbec_description//:ament_package",
+        "@rclcpp_components//:ament_package",
+        # <topic>/compressed (JPEG). Its own index: the image_transport_plugins
+        # metapackage doesn't bring its plugins into the runfiles.
+        "@compressed_image_transport//:ament_index",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    executables = [
+        ":list_camera_profile_mode_node",
+        ":list_devices_node",
+    ],
+    headers = HEADERS,
+    libraries = [":orbbec_camera"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@image_publisher//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@orbbec_camera_msgs//:ament_package",
+        "@orbbec_description//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

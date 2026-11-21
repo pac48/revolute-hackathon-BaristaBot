@@ -1,0 +1,10 @@
+--- a/lerobot-0.7.0.dist-info/METADATA
++++ b/lerobot-0.7.0.dist-info/METADATA
+@@ -360,7 +360,6 @@
+ Requires-Dist: lerobot[aloha]; extra == "all"
+ Requires-Dist: lerobot[pusht]; extra == "all"
+ Requires-Dist: lerobot[phone]; extra == "all"
+-Requires-Dist: lerobot[libero]; sys_platform == "linux" and extra == "all"
+ Requires-Dist: lerobot[metaworld]; extra == "all"
+ Requires-Dist: lerobot[sarm]; extra == "all"
+ Requires-Dist: lerobot[robometer]; extra == "all"

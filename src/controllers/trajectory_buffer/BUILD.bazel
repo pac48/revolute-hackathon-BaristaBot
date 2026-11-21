@@ -1,0 +1,23 @@
+# trajectory_buffer: timestamped, partial, preemptable joint position targets smoothed into a C2
+# piecewise-quintic trajectory (see trajectory_buffer.hpp). No dependencies beyond the standard
+# library; allocates only at construction, for use in real-time control loops.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "trajectory_buffer",
+    srcs = ["trajectory_buffer.cpp"],
+    hdrs = ["trajectory_buffer.hpp"],
+)
+
+cc_test(
+    name = "trajectory_buffer_test",
+    size = "small",
+    srcs = ["trajectory_buffer_test.cpp"],
+    deps = [
+        ":trajectory_buffer",
+        "@rosdistro//cc:googletest",
+    ],
+)

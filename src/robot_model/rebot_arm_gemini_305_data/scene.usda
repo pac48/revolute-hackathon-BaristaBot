@@ -1,0 +1,17 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+    subLayers = [
+        @../rebot_arm_data/usd/rebot_arm.usda@,
+        @../../camera_models/gemini_305_data/gemini_305.usda@,
+        @scene_camera.usda@,
+        @../rebot_arm_data/usd/environment.usda@
+    ]
+)
+
+# The reBot Arm with the Orbbec Gemini 305 on its wrist: the USD files of the two base models
+# (and the shared environment) layered into one stage, as scene.xml attaches the camera's MJCF to
+# the arm's, plus the scene camera (scene_camera.usda). Prims are /World/<MJCF body name>; the
+# cameras are /Render/<name> (RenderProducts).

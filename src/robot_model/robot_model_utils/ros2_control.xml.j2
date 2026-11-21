@@ -1,0 +1,35 @@
+{#- ros2_control block that runs a URDF model in mujoco_ros2_control.
+    Rendered by ros2_control.render(); one <joint> per movable URDF joint.
+    Variables:
+      name              ros2_control system name
+      plugin            hardware plugin, e.g. mujoco_ros2_control/MujocoSystemInterface
+      mujoco_model      absolute path of the MJCF
+      headless          bool, run without the MuJoCo viewer
+      pids_config_file  absolute path of a PID gains YAML, or none
+      joints            [{name, type, initial_position, command_interfaces}] from the URDF;
+                        joints with no command interfaces are state-only (passive)
+-#}
+<ros2_control name="{{ name }}" type="system">
+  <hardware>
+    <plugin>{{ plugin }}</plugin>
+    <param name="mujoco_model">{{ mujoco_model }}</param>
+    <param name="headless">{{ headless | string | lower }}</param>
+{%- if pids_config_file %}
+    <param name="pids_config_file">{{ pids_config_file }}</param>
+{%- endif %}
+  </hardware>
+{%- for joint in joints %}
+  <joint name="{{ joint.name }}">
+{%- for interface in joint.command_interfaces %}
+{%- if interface in ("velocity", "kp", "kd", "t_ff") %}
+    <command_interface name="{{ interface }}"><param name="initial_value">0.0</param></command_interface>
+{%- else %}
+    <command_interface name="{{ interface }}"/>
+{%- endif %}
+{%- endfor %}
+    <state_interface name="position"><param name="initial_value">{{ joint.initial_position }}</param></state_interface>
+    <state_interface name="velocity"/>
+    <state_interface name="effort"/>
+  </joint>
+{%- endfor %}
+</ros2_control>

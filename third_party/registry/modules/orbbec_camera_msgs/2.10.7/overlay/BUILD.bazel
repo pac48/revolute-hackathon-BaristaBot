@@ -1,0 +1,60 @@
+# Generated for orbbec_camera_msgs (see third_party/registry/README.md).
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+
+# Apache-2.0 (package.xml); the license text is in the repository root, outside this module.
+package(default_visibility = ["//visibility:public"])
+
+default_generators(
+    dependencies = [
+        "@sensor_msgs",
+        "@std_msgs",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "//msg:DepthFilterParam",
+        "//msg:DepthFilterState",
+        "//msg:DepthFiltersStatus",
+        "//msg:DeviceInfo",
+        "//msg:DeviceStatus",
+        "//msg:Extrinsics",
+        "//msg:IMUInfo",
+        "//msg:Metadata",
+        "//msg:RGBD",
+        "//msg:StreamProfile",
+        "//msg:StreamStatus",
+        "//srv:GetActionConfig",
+        "//srv:GetAwbGain",
+        "//srv:GetBool",
+        "//srv:GetCameraInfo",
+        "//srv:GetDeviceConfig",
+        "//srv:GetDeviceInfo",
+        "//srv:GetInt32",
+        "//srv:GetString",
+        "//srv:GetUserCalibParams",
+        "//srv:SendActionCommand",
+        "//srv:SetActionConfig",
+        "//srv:SetArrays",
+        "//srv:SetAwbGain",
+        "//srv:SetBagRecording",
+        "//srv:SetFilter",
+        "//srv:SetInt32",
+        "//srv:SetStreamProfile",
+        "//srv:SetString",
+        "//srv:SetUserCalibParams",
+        "//action:RunAeAwbLockTest",
+    ],
+)
+
+rosidl_ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    deps = [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

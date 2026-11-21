@@ -1,0 +1,5 @@
+# Python packages for //tools/ros2 that must be newer than @pip_ros's.
+# argcomplete >= 3.5: 3.1.4 (@pip_ros) crashes completing on Python 3.12's argparse.
+argcomplete>=3.5
+# graphviz: `ros2 control view_controller_chains` (an RCR ros2controlcli import).
+graphviz

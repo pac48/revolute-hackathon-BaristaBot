@@ -1,0 +1,20 @@
+# BUILD files for the reBot Arm RS CAN driver, from two xiayip repos (http_archives in MODULE.bazel):
+#   shared_can_hardware (shared_can_interface: header-only protocol/transport ABI), and
+#   rebot_arm_rs_ros2 (rebot_robstride_protocol: the RobStride and gripper protocol plugins).
+exports_files(glob(["*.BUILD.bazel", "*.patch"]))
+#
+# Patches (applied in this order):
+#   include_string.patch: the missing #include <string> with libc++.
+#   gripper_si_units.patch: RebotGripperProtocol's optional `stroke` parameter (m) gives the gripper's
+#     position in m, velocity in m/s and effort in N, 0 = closed, as the sim's joint7, instead of
+#     normalized 0 open..1 closed.
+#   gripper_velocity_feedforward.patch: the gripper's slew sends its velocity as the MIT dq_des, so kd
+#     does not brake it (kd * speed reaches the motor's torque limit well below the slew limit).
+#   gripper_velocity_range.patch: with `stroke`, the speed limit may go up to the motor's velocity limit
+#     over the stroke (0.33 m/s for the RS00), not only the stroke per second.
+#   gripper_max_torque.patch: the optional `max_torque` parameter (N*m at the motor) limits the squeeze: a motor stalled behind
+#     its target (an object in the gripper) is commanded only max_torque / kp ahead of it, not the full 14 N*m.
+#   gripper_max_torque_release.patch: the limit lets go when the target reverses (opening), so a limit below the gripper's friction can't hold it shut.
+#
+# shared_can_hardware: can_system_retry_initial_reads.patch (CanSystem asks again, every 100 ms, for the initial states that are still
+#   missing: a motor drops about one read in ten, which failed the whole activation).

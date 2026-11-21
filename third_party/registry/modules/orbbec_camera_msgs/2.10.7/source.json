@@ -1,0 +1,11 @@
+{
+    "url": "https://github.com/orbbec/OrbbecSDK_ROS2/archive/ffba347cadc96d0457a91af59fc06cdf86052728.tar.gz",
+    "integrity": "sha256-v6CfjlVb+QzF12IkZX+PJpzSEQ/Ya/r6eRvr37A4ADE=",
+    "strip_prefix": "OrbbecSDK_ROS2-ffba347cadc96d0457a91af59fc06cdf86052728/orbbec_camera_msgs",
+    "overlay": {
+        "BUILD.bazel": "sha256-qd+PMXnmZNxTdK5JdDEy++f3LflA03otAYIUTZbyG70=",
+        "action/BUILD.bazel": "sha256-4pB3buaw2+TV+n0vTaIcwS6oWywOXn/MUHqiecNzT8Q=",
+        "msg/BUILD.bazel": "sha256-4EuW011UTdnlBi2Vmg+xEYA97BqBAJ5v2ZJD4pqeBdU=",
+        "srv/BUILD.bazel": "sha256-lvSiDtLD5qLR7XkdNtnsyt5TVdeN9S5c7am3qVEm5HE="
+    }
+}

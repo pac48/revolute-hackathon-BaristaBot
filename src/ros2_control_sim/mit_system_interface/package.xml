@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mit_system_interface</name>
+  <version>0.0.0</version>
+  <description>MuJoCo ros2_control system with the reBot Arm RS's MIT-mode joint interfaces</description>
+  <maintainer email="noreply@example.com">home-institute</maintainer>
+  <license>Apache-2.0</license>
+</package>

@@ -1,0 +1,53 @@
+# Only rebot_robstride_protocol: pluginlib plugins (shared_can_interface::v1::ProtocolInterface)
+# for the RobStride private extended-CAN protocol and the RS00 gripper.
+# The ament index (:ament_index) is what a shared_can_ros2 hardware's pluginlib finds them through.
+
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "rebot_robstride_protocol_library",
+    srcs = glob(["rebot_robstride_protocol/src/*.cpp"]),
+    hdrs = glob(["rebot_robstride_protocol/include/rebot_robstride_protocol/*.hpp"]),
+    includes = ["rebot_robstride_protocol/include"],
+    deps = [
+        "@pluginlib//:pluginlib_library",
+        "@shared_can_hardware//:shared_can_interface",
+    ],
+)
+
+cc_shared_library(
+    name = "rebot_robstride_protocol",
+    dynamic_deps = ["@pluginlib//:pluginlib"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rebot_robstride_protocol_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    export_name = "rebot_robstride_protocol",
+    libraries = [":rebot_robstride_protocol"],
+    package_xml = "rebot_robstride_protocol/package.xml",
+    plugin_category = "shared_can_interface",
+    plugins = ["rebot_robstride_protocol/rebot_robstride_protocol.xml"],
+    deps = ["@pluginlib//:ament_package"],
+)
+
+[
+    cc_test(
+        name = name,
+        size = "small",
+        srcs = ["rebot_robstride_protocol/test/%s.cpp" % name],
+        deps = [
+            ":rebot_robstride_protocol_library",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for name in [
+        "test_robstride_protocol",
+        "test_startup_readiness",
+        "test_rebot_gripper_protocol",
+    ]
+]

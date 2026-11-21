@@ -1,0 +1,20 @@
+# fast_robot_kinematics: unrolled FK (and LBFGS IK) code generated per robot
+# from code_generation/robot_config.cpp.template. Its own generator script is not
+# used; see //src/robot_model/robot_model_utils:fast_kinematics_gen.py.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["code_generation/robot_config.cpp.template", "LICENSE"])
+
+# Needs FAST_FK_NUMBER_OF_JOINTS (and FAST_FK_USE_IK for IK) defined by the user.
+cc_library(
+    name = "headers",
+    hdrs = glob(["include/fast_forward_kinematics/*.hpp"]),
+    includes = ["include"],
+    deps = [
+        "@eigen",
+        "@lbfgspp",
+    ],
+)

@@ -1,0 +1,7 @@
+# LeRobot's dataset format changes between releases: pin it, and bump deliberately.
+lerobot[dataset,accelerate-dep]==0.7.0  # accelerate-dep: lerobot-train (//src/lerobot_policy:train)
+mcap
+mcap-ros2-support
+# PyTorch for CUDA 13.2 (the driver's: nvidia-smi). Its CUDA libraries are in extras (cuda-toolkit[cudart, ...]),
+# which rules_python does not make deps: BUILD.bazel's :torch_cuda lists them.
+torch==2.15.0

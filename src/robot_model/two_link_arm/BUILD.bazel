@@ -1,0 +1,57 @@
+# two_link_arm: functionality for the two_link_arm robot model (C++: load_mujoco_model;
+# Python: description.robot_description for ros2_control), built on the
+# model files in ../two_link_arm_data.
+
+load("//src/robot_model/robot_model_utils:viewer.bzl", "model_viewer")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "two_link_arm",
+    srcs = ["two_link_arm.cpp"],
+    hdrs = ["two_link_arm.hpp"],
+    data = ["//src/robot_model/two_link_arm_data:scene.xml"],
+    local_defines = [
+        "TWO_LINK_ARM_MJCF=\\\"$(rlocationpath //src/robot_model/two_link_arm_data:scene.xml)\\\"",
+    ],
+    deps = [
+        "//src/robot_model/robot_model_utils:mujoco_model",
+        "//src/robot_model/robot_model_utils:state_estimator",
+    ],
+)
+
+cc_test(
+    name = "two_link_arm_test",
+    size = "small",
+    srcs = ["two_link_arm_test.cpp"],
+    deps = [
+        ":two_link_arm",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Python: robot_description() for ros2_control (URDF + mujoco_ros2_control block).
+py_library(
+    name = "description",
+    srcs = ["description.py"],
+    deps = [
+        "//src/robot_model/robot_model_utils:ros2_control",
+        "//src/robot_model/two_link_arm_data:mjcf",
+        "//src/robot_model/two_link_arm_data:urdf",
+    ],
+)
+
+py_test(
+    name = "description_test",
+    size = "small",
+    srcs = ["description_test.py"],
+    deps = [":description"],
+)
+
+# Inspect the model: bazel run //src/robot_model/two_link_arm:view  (MuJoCo viewer; see robot_model_utils/viewer.py)
+model_viewer(
+    name = "view",
+    mjcf = "//src/robot_model/two_link_arm_data:scene.xml",
+)

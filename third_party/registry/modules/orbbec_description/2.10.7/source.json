@@ -1,0 +1,9 @@
+{
+    "url": "https://github.com/orbbec/OrbbecSDK_ROS2/archive/ffba347cadc96d0457a91af59fc06cdf86052728.tar.gz",
+    "integrity": "sha256-v6CfjlVb+QzF12IkZX+PJpzSEQ/Ya/r6eRvr37A4ADE=",
+    "strip_prefix": "OrbbecSDK_ROS2-ffba347cadc96d0457a91af59fc06cdf86052728/orbbec_description",
+    "overlay": {
+        "BUILD.bazel": "sha256-wA9Fl0dx/CQ8cRBf+MjVfrTxUre4tf8NQaEDJO95kI8=",
+        "launch/BUILD.bazel": "sha256-oAkhBDp8HKXqkmycvwgvn1c7+vfQ9ZmkuiU+gDqiHzE="
+    }
+}

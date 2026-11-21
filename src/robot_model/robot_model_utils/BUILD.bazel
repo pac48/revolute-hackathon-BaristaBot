@@ -1,0 +1,252 @@
+# robot_model_utils: shared code for the robot model packages.
+#   py_data_library.bzl  Python interface for data files and executables
+#   :mujoco_model        C++ runfiles lookup + MJCF loading used by each model library
+#   :motion_planner      C++ MotionPlanner interface (+ MuJoCo state helpers) for every model
+#   :vamp_planner        VampPlanner<Robot>: MotionPlanner for robots from vamp_robot
+#   :planner_cli         JSON stdin/stdout planning for any MotionPlanner
+#   :ros2_control        Python: add a mujoco_ros2_control <ros2_control> block to a URDF
+#   :kinematics          C++ Kinematics interface (FK/IK on mjData) for every model
+#   :kinematics_cli      JSON stdin/stdout FK and dense IK for any Kinematics
+#   fast_kinematics.bzl  fast_kinematics(): a robot's Kinematics from fast_robot_kinematics code gen
+#   viewer.bzl           model_viewer(): `bazel run` target that opens a model's MJCF in MuJoCo's viewer
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load(":py_data_library.bzl", "py_data_library")
+
+exports_files(["viewer.py"])
+
+# MuJoCo's viewer app (`simulate`); see viewer.py and viewer.bzl.
+py_data_library(
+    name = "viewer_simulate",
+    src = "@mujoco//:simulate",
+    visibility = ["//visibility:private"],
+)
+
+py_library(
+    name = "viewer",
+    srcs = ["viewer.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":viewer_simulate",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+cc_library(
+    name = "mujoco_model",
+    srcs = ["mujoco_model.cpp"],
+    hdrs = ["mujoco_model.hpp"],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+        "//src/teleop/controller:__pkg__",  # teleop: in-process IK
+    ],
+    deps = [
+        "@rosdistro//cc:mujoco_library",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+# The Renderer interface (renderer.hpp), which the models' headers include. Linking
+# :renderer is what pulls in ovrtx.
+cc_library(
+    name = "renderer_api",
+    hdrs = ["renderer.hpp"],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+    ],
+    deps = ["@rosdistro//cc:mujoco_library"],
+)
+
+# Renderer: ovrtx (RTX) images of a model's USD scene (renderer.hpp). Needs an NVIDIA GPU at run time.
+cc_library(
+    name = "renderer",
+    srcs = ["renderer.cpp"],
+    data = [
+        "@ovrtx_sdk//:ovrtx/bin/libovrtx-dynamic.so",
+        "@ovstage_sdk//:ovstage/bin/libovstage-dynamic.so",
+    ],
+    local_defines = [
+        "OVRTX_RUNTIME_MARKER=\\\"$(rlocationpath @ovrtx_sdk//:ovrtx/bin/libovrtx-dynamic.so)\\\"",
+        "OVSTAGE_RUNTIME_MARKER=\\\"$(rlocationpath @ovstage_sdk//:ovstage/bin/libovstage-dynamic.so)\\\"",
+    ],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+    ],
+    deps = [
+        ":mujoco_model",
+        ":renderer_api",
+        "@ovrtx_sdk//:ovrtx",
+        "@ovstage_sdk//:ovstage",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
+
+# Test helper: do the USD files correspond to the MJCF (usd_correspondence.hpp).
+cc_library(
+    name = "usd_correspondence",
+    testonly = True,
+    srcs = ["usd_correspondence.cpp"],
+    hdrs = ["usd_correspondence.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":mujoco_model",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
+
+# State estimation interface (state_estimator.hpp): update a model's mjData from observations
+# (joint states for now); each model's make_state_estimator() returns one.
+cc_library(
+    name = "state_estimator",
+    srcs = ["state_estimator.cpp"],
+    hdrs = ["state_estimator.hpp"],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+        "//src/teleop/controller:__pkg__",
+    ],
+    deps = [
+        ":mujoco_model",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
+
+# Motion planning interface: each robot model's make_planner() returns one.
+cc_library(
+    name = "motion_planner",
+    srcs = ["motion_planner.cpp"],
+    hdrs = ["motion_planner.hpp"],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+        "//src/teleop/controller:__pkg__",  # teleop: VAMP fallback
+    ],
+    deps = [
+        ":mujoco_model",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
+
+# JSON command-line front end for a MotionPlanner (each model provides a main).
+cc_library(
+    name = "planner_cli",
+    srcs = ["planner_cli.cpp"],
+    hdrs = ["planner_cli.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":motion_planner",
+        ":mujoco_model",
+        "@nlohmann_json//:json",
+    ],
+)
+
+# Header-only VAMP implementation; the file that instantiates it needs
+# VAMP_COPTS (//third_party/vamp:defs.bzl).
+cc_library(
+    name = "vamp_planner",
+    hdrs = ["vamp_planner.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":motion_planner",
+        "@vamp",
+    ],
+)
+
+cc_test(
+    name = "motion_planner_test",
+    size = "small",
+    srcs = ["motion_planner_test.cpp"],
+    deps = [
+        ":motion_planner",
+        "//src/robot_model/two_link_arm",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# <ros2_control> block for mujoco_ros2_control (Jinja2 template + renderer).
+# Generic; each model package's description module supplies its own joints,
+# command interfaces and PID gains.
+py_data_library(
+    name = "ros2_control",
+    src = "ros2_control.xml.j2",
+    srcs = ["ros2_control.py"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [requirement("jinja2")],
+)
+
+py_test(
+    name = "ros2_control_test",
+    size = "small",
+    srcs = ["ros2_control_test.py"],
+    deps = [":ros2_control"],
+)
+
+# Kinematics interface: each robot model's make_kinematics() returns one.
+cc_library(
+    name = "kinematics",
+    srcs = ["kinematics.cpp"],
+    hdrs = ["kinematics.hpp"],
+    visibility = [
+        "//src/robot_model:__subpackages__",
+        "//src/teleop/controller:__pkg__",  # teleop: in-process IK
+    ],
+    deps = [
+        ":mujoco_model",
+        "@eigen",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
+
+# KDL backend of Kinematics, built from the MuJoCo model (see kdl_kinematics.hpp).
+cc_library(
+    name = "kdl_kinematics",
+    srcs = ["kdl_kinematics.cpp"],
+    hdrs = ["kdl_kinematics.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":kinematics",
+        "@orocos-kdl",
+    ],
+)
+
+# JSON command-line front end for a Kinematics (each model provides a main).
+cc_library(
+    name = "kinematics_cli",
+    srcs = ["kinematics_cli.cpp"],
+    hdrs = ["kinematics_cli.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":kinematics",
+        ":mujoco_model",
+        "@nlohmann_json//:json",
+    ],
+)
+
+# Backend for fast_kinematics() (only its generated glue includes this).
+cc_library(
+    name = "fast_kinematics_impl",
+    hdrs = ["fast_kinematics_impl.hpp"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        ":kinematics",
+        "@fast_robot_kinematics//:headers",
+    ],
+)
+
+# fast_robot_kinematics code generation (fast_kinematics.bzl).
+py_binary(
+    name = "fast_kinematics_gen",
+    srcs = ["fast_kinematics_gen.py"],
+    visibility = ["//src/robot_model:__subpackages__"],
+    deps = [
+        requirement("jinja2"),
+        requirement("numpy"),
+    ],
+)
+
+py_test(
+    name = "fast_kinematics_gen_test",
+    size = "small",
+    srcs = ["fast_kinematics_gen_test.py"],
+    deps = [":fast_kinematics_gen"],
+)

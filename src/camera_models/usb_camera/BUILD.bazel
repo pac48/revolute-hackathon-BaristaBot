@@ -1,0 +1,30 @@
+# usb_camera: functionality for the usb_camera camera model (Python: description.urdf_text, .cameras,
+# .DRIVER_ROOT), built on the model files in ../usb_camera_data.
+
+load("//src/robot_model/robot_model_utils:viewer.bzl", "model_viewer")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "description",
+    srcs = ["description.py"],
+    deps = [
+        "//src/camera_models/camera_model_utils:mjcf_cameras",
+        "//src/camera_models/usb_camera_data:mjcf",
+        "//src/camera_models/usb_camera_data:urdf",
+    ],
+)
+
+py_test(
+    name = "description_test",
+    size = "small",
+    srcs = ["description_test.py"],
+    deps = [":description"],
+)
+
+# Inspect the model: bazel run //src/camera_models/usb_camera:view  (MuJoCo viewer; see robot_model_utils/viewer.py)
+model_viewer(
+    name = "view",
+    mjcf = "//src/camera_models/usb_camera_data:usb_camera.xml",
+)

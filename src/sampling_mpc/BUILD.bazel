@@ -1,0 +1,119 @@
+# sampling_mpc: sampling-based MPC for trajectory generation on the GPU: DIAL-MPC
+# (https://github.com/LeCAR-Lab/dial-mpc) on MuJoCo Warp, with pluggable cost functions.
+# See README.md. Python deps are the @pip_mpc hub (requirements.in -> requirements_lock.txt,
+# regenerate with `bazel run //src/sampling_mpc:requirements.update`).
+
+load("@pip_mpc//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+
+package(default_visibility = ["//visibility:public"])
+
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.in",
+    requirements_txt = "requirements_lock.txt",
+)
+
+# Control nodes <-> per-step controls (numpy and SciPy only).
+py_library(
+    name = "splines",
+    srcs = ["splines.py"],
+    deps = [
+        requirement("numpy"),
+        requirement("scipy"),
+    ],
+)
+
+# Cost functions: Warp kernels over MuJoCo Warp's batched Data.
+py_library(
+    name = "costs",
+    srcs = ["costs.py"],
+    deps = [
+        requirement("mujoco"),
+        requirement("numpy"),
+        requirement("warp-lang"),
+    ],
+)
+
+# Position-servo version of a torque-actuated model (the controller's gains), for planning targets.
+py_library(
+    name = "servo",
+    srcs = ["servo.py"],
+    deps = [
+        requirement("mujoco"),
+        requirement("numpy"),
+    ],
+)
+
+# Batched GPU rollouts (one CUDA graph per rollout).
+py_library(
+    name = "rollout",
+    srcs = ["rollout.py"],
+    deps = [
+        ":costs",
+        requirement("mujoco"),
+        requirement("mujoco-warp"),
+        requirement("numpy"),
+        requirement("warp-lang"),
+    ],
+)
+
+# DialMpc, DialConfig, Plan.
+py_library(
+    name = "dial_mpc",
+    srcs = ["dial_mpc.py"],
+    deps = [
+        ":costs",
+        ":rollout",
+        ":splines",
+        requirement("mujoco"),
+        requirement("numpy"),
+    ],
+)
+
+py_test(
+    name = "splines_test",
+    size = "small",
+    srcs = ["splines_test.py"],
+    deps = [":splines"],
+)
+
+# Cost kernels on Warp's CPU device: no GPU.
+py_test(
+    name = "costs_test",
+    size = "small",
+    srcs = ["costs_test.py"],
+    deps = [
+        ":costs",
+        requirement("mujoco"),
+        requirement("numpy"),
+        requirement("warp-lang"),
+    ],
+)
+
+# The algorithm's host-side pieces (noise schedule, weights, shifting): no GPU.
+py_test(
+    name = "dial_core_test",
+    size = "small",
+    srcs = ["dial_core_test.py"],
+    deps = [":dial_mpc"],
+)
+
+# Plans on the GPU (an NVIDIA GPU, outside any sandbox; the first run compiles kernels, a minute):
+#   bazel test //src/sampling_mpc:dial_mpc_gpu_test
+# Not in //...
+py_test(
+    name = "dial_mpc_gpu_test",
+    size = "large",
+    srcs = ["dial_mpc_gpu_test.py"],
+    tags = [
+        "local",
+        "manual",
+        "requires-gpu",
+    ],
+    deps = [
+        ":dial_mpc",
+        requirement("mujoco"),
+    ],
+)

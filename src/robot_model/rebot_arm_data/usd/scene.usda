@@ -1,0 +1,13 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Z"
+    subLayers = [
+        @./rebot_arm.usda@,
+        @./environment.usda@
+    ]
+)
+
+# The reBot Arm scene: the arm's bodies composed with the shared environment. Prims are
+# /World/<MJCF body name>; the cameras are /Render/<name> (RenderProducts).

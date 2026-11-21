@@ -1,0 +1,88 @@
+# @cricket: tracing compiler for spherized robots
+# (https://github.com/CoMMALab/cricket). Builds fkcc_gen (robot JSON ->
+# VAMP header); the JIT runtime and Python bindings are not built.
+# License: MIT
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob([
+    "resources/templates/*",
+    # Example robots (used to test the codegen rule).
+    "resources/*/*.urdf",
+    "resources/*/*.srdf",
+]) + ["LICENSE.txt"])
+
+# CMake's configure_file of include/cricket/embedded_templates.hh.in.
+genrule(
+    name = "embedded_templates",
+    srcs = [
+        "resources/templates/fk_template.hh",
+        "resources/templates/ccfk_template.hh",
+    ],
+    outs = ["generated/cricket/embedded_templates.hh"],
+    cmd = """(
+      printf '#pragma once\\n#include <string_view>\\nnamespace cricket::embedded\\n{\\n';
+      printf '    inline constexpr std::string_view kFkTemplate   = R"INJA_DELIM(';
+      cat $(location resources/templates/fk_template.hh);
+      printf ')INJA_DELIM";\\n    inline constexpr std::string_view kCcfkTemplate = R"INJA_DELIM(';
+      cat $(location resources/templates/ccfk_template.hh);
+      printf ')INJA_DELIM";\\n}  // namespace cricket::embedded\\n';
+    ) > $@""",
+)
+
+cc_library(
+    name = "inja",
+    hdrs = glob(["third_party/inja/include/**/*.hpp"]),
+    includes = ["third_party/inja/include"],
+    deps = ["@nlohmann_json//:json"],
+)
+
+cc_library(
+    name = "cricket",
+    srcs = [
+        "src/codegen.cc",
+        "src/robot_info.cc",
+        "src/tracing/distance.cc",
+        "src/tracing/forward_dynamics.cc",
+        "src/tracing/frame_jacobian.cc",
+        "src/tracing/integrate_configuration.cc",
+        "src/tracing/interpolate.cc",
+        "src/tracing/mapping.cc",
+    ] + glob(["src/**/*.hh"]),
+    hdrs = [
+        "include/cricket/codegen.hh",
+        "include/cricket/robot_info.hh",
+        ":embedded_templates",
+    ],
+    copts = ["-w"],
+    includes = [
+        "generated",
+        "include",
+        "src",
+    ],
+    deps = [
+        ":inja",
+        "@cgal",
+        "@cppad",
+        "@cppadcg",
+        "@eigen",
+        "@fmt",
+        "@nlohmann_json//:json",
+        "@pinocchio//:pinocchio_collision_library",
+        "@pinocchio//:pinocchio_default_library",
+        "@pinocchio//:pinocchio_parsers_library",
+    ],
+)
+
+cc_binary(
+    name = "fkcc_gen",
+    srcs = ["src/fkcc_gen.cc"],
+    copts = ["-w"],
+    deps = [
+        ":cricket",
+        "@cxxopts",
+        "@fmt",
+    ],
+)

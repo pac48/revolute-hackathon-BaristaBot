@@ -1,0 +1,35 @@
+# NVIDIA ovrtx C SDK, from the manylinux_2_35_x86_64 wheel (http_archive type = "zip" in
+# MODULE.bazel): headers, the shared forwarding loader and the runtime payload (bin/). The
+# loader dlopens the runtime from bin/ at run time, so //:runtime is the data of anything that
+# creates a renderer; the application passes bin/'s location (from runfiles) to the loader.
+# ovrtx.h includes ovstage's headers: see @ovstage_sdk.
+
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The marker the application resolves through runfiles to find bin/.
+exports_files(["ovrtx/bin/libovrtx-dynamic.so"])
+
+filegroup(
+    name = "runtime",
+    srcs = glob(["ovrtx/bin/**"]),
+)
+
+# The shared forwarding loader: a C ABI, as the static one is built against libstdc++ (and this
+# workspace's toolchain uses libc++). It opens the runtime in bin/ when the renderer is created.
+cc_import(
+    name = "loader",
+    shared_library = "ovrtx/bin/libovrtx-dynamic.so",
+)
+
+cc_library(
+    name = "ovrtx",
+    hdrs = glob(["ovrtx/include/**/*.h"]),
+    data = [":runtime"],
+    includes = ["ovrtx/include"],
+    deps = [
+        ":loader",
+        "@ovstage_sdk//:ovstage",
+    ],
+)

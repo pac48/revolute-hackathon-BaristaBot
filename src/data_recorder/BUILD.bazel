@@ -1,0 +1,91 @@
+# data_recorder: records training data (controller states, camera images) to MCAP rosbags without loss.
+#   :record  bazel run //src/data_recorder:record -- [--use-sim-time] [-o DIR] [--episodic] [--no-voice]  (see recorder_main.cpp)
+#   It says "Start demonstration" / "End demonstration" (sounds/*.wav, through paplay or aplay) when recording starts and stops.
+#   The clips are espeak-ng's en-us voice at 150 words/min (e.g. `espeak-ng -v en-us -s 150 -w sounds/start_demonstration.wav "Start demonstration"`).
+
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_python//python:defs.bzl", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# ROS libraries the recorder links (static), and their shared-library closure.
+RECORDER_ROS_DEPS = {
+    "@compressed_depth_image_transport//:codecs": "@compressed_depth_image_transport//:codecs_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+}
+
+collect_transitive_dynamic_deps(
+    name = "recorder_dynamic_deps",
+    dynamic_deps = RECORDER_ROS_DEPS.keys(),
+)
+
+# Message packages of the recorded topics. Generic subscriptions load a type's typesupport by name at run time,
+# and the bag stores each type's definition from its package's share directory, so every package of a recorded
+# type (and of the types those contain) must be here.
+INTERFACES = [
+    "builtin_interfaces",
+    "control_msgs",
+    "geometry_msgs",
+    "sensor_msgs",
+    "std_msgs",
+    "std_srvs",  # the episode services (--episodic)
+    "tf2_msgs",
+    "trajectory_msgs",
+]
+
+cc_binary(
+    name = "record",
+    srcs = ["recorder_main.cpp"],
+    copts = ["-Wno-deprecated-declarations"],  # rosidl_runtime_cpp's codecvt use
+    data = [
+        "sounds/end_demonstration.wav",
+        "sounds/start_demonstration.wav",
+        # The MCAP storage plugin and rosbag2's serialization converters, loaded through pluginlib.
+        "@rosbag2_cpp//:ament_index",
+        "@rosbag2_storage_mcap//:ament_index",
+    ] + [
+        "@{}//:{}".format(pkg, target)
+        for pkg in INTERFACES
+        for target in [
+            "ament_index",
+            pkg + "__rosidl_typesupport_cpp",
+            pkg + "__rosidl_typesupport_fastrtps_cpp",
+            pkg + "__rosidl_typesupport_introspection_cpp",
+        ]
+    ],
+    dynamic_deps = [":recorder_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = RECORDER_ROS_DEPS.values() + [
+        "@cxxopts",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+# bazel run //src/data_recorder:bag_check -- BAG_DIR  (missing messages, from the recorded sequence numbers)
+cc_binary(
+    name = "bag_check",
+    srcs = ["bag_check_main.cpp"],
+    dynamic_deps = ["@rosdistro//cc:mcap"],
+    deps = ["@rosdistro//cc:mcap_library"],
+)
+
+# --episodic: ~/start and ~/stop make one bag per episode; a second ~/start discards the episode.
+py_test(
+    name = "episodes_test",
+    size = "small",
+    srcs = ["episodes_test.py"],
+    data = [":record"],
+    env = {"RECORDER": "$(rlocationpath :record)"},
+    deps = [
+        "@rclpy",
+        "@rules_python//python/runfiles",
+        "@sensor_msgs//:py",
+        "@std_srvs//:py",
+    ],
+)

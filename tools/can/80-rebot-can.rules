@@ -1,0 +1,16 @@
+# Brings the reBot arms' PEAK PCAN-USB adapters up as 1 Mbit/s CAN (can0, can1) when they are plugged in or at boot,
+# so `ip link set canN up type can bitrate 1000000` isn't needed by hand. Install: tools/can/install_udev_rule.sh
+#
+# A short transmit queue (the default is 10 frames) overflows when six or seven motors are commanded at 200 Hz,
+# so it is 1000 here. Vendor 0c72 is PEAK-System. The kernel numbers the adapters in the order they enumerate (can0, can1),
+# which isn't tied to a USB port: see the commented rules below to pin a name to a port.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="can[0-9]*", ATTRS{idVendor}=="0c72", \
+  RUN+="/usr/sbin/ip link set %k type can bitrate 1000000", \
+  RUN+="/usr/sbin/ip link set %k txqueuelen 1000", \
+  RUN+="/usr/sbin/ip link set %k up"
+
+# Pin names to USB ports (udevadm info -q property -p /sys/class/net/can0 | grep ID_PATH shows a port's ID_PATH): then
+# "left" and "right" stay the same adapters whatever order they enumerate in. real_arm takes the names with
+# --can-interface can_left can_right. (Uncomment, and use the ID_PATH values of your two ports.)
+#SUBSYSTEM=="net", ACTION=="add", KERNEL=="can[0-9]*", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:1:1.0", NAME="can_left"
+#SUBSYSTEM=="net", ACTION=="add", KERNEL=="can[0-9]*", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:2:1.0", NAME="can_right"

@@ -1,0 +1,143 @@
+# joint_impedance_controller: a ros2_control controller plugin (controller_interface) that
+# tracks joint trajectories (smoothed by //src/controllers/trajectory_buffer) with feedforward dynamics and PD feedback on an effort interface.
+# See joint_impedance_controller.hpp. Parameters: joint_impedance_controller_parameters.yaml
+# (generate_parameter_library).
+#
+# The plugin is a cc_shared_library like the ros2_control controllers in @rosdistro's repos, with the
+# ROS libraries it uses as dynamic_deps (one copy of each in the controller_manager's process).
+# The ament index (:ament_index) is what the controller_manager's pluginlib finds it through;
+# add it to the data of the process that loads controllers.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@control_msgs//:cc_shared": "@control_msgs//:cc",
+    "@control_toolbox//:control_toolbox": "@control_toolbox//:control_toolbox_library",
+    "@controller_interface//:controller_interface": "@controller_interface//:controller_interface_library",
+    "@controller_manager//:controller_manager": "@controller_manager//:controller_manager_library",
+    "@generate_parameter_library//:rsl": "@generate_parameter_library//:rsl_library",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libcap": "@rosdistro//cc:libcap_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rsl//:rsl": "@rsl//:rsl_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:tl_expected",
+]
+
+generate_parameter_library(
+    name = "joint_impedance_controller_parameters",
+    package_name = "joint_impedance_controller",
+    yaml_file = "joint_impedance_controller_parameters.yaml",
+)
+
+# Rigid-body dynamics terms (KDL) of a URDF's joints; no ROS beyond kdl_parser.
+cc_library(
+    name = "tree_dynamics",
+    srcs = ["tree_dynamics.cpp"],
+    hdrs = ["tree_dynamics.hpp"],
+    deps = [
+        "@kdl_parser//:kdl_parser_library",
+        "@orocos-kdl",
+    ],
+)
+
+cc_library(
+    name = "joint_impedance_controller_library",
+    srcs = [
+        "joint_impedance_controller.cpp",
+        "tree_dynamics.cpp",
+    ],
+    hdrs = [
+        "joint_impedance_controller.hpp",
+        "tree_dynamics.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_impedance_controller_parameters",
+        "//src/controllers/trajectory_buffer",
+        "@orocos-kdl",
+    ],
+)
+
+cc_shared_library(
+    name = "joint_impedance_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//src/controllers/joint_impedance_controller:__subpackages__"],
+    deps = [":joint_impedance_controller_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    export_name = "joint_impedance_controller",
+    libraries = [":joint_impedance_controller"],
+    package_xml = "package.xml",
+    plugin_category = "controller_interface",
+    plugins = ["joint_impedance_plugin.xml"],
+    deps = [
+        "@controller_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)
+
+# KDL dynamics terms agree with MuJoCo's inverse dynamics of the MJCF the URDF comes from.
+cc_test(
+    name = "tree_dynamics_test",
+    size = "small",
+    srcs = ["tree_dynamics_test.cpp"],
+    args = [
+        "$(rlocationpath //src/robot_model/rebot_arm_data:rs_generated.urdf)",
+        "$(rlocationpath //src/robot_model/rebot_arm_data:rs_arm_mjcf)",
+    ],
+    data = [
+        "//src/robot_model/rebot_arm_data:rs_arm_mjcf",
+        "//src/robot_model/rebot_arm_data:rs_generated.urdf",
+        "@urdf//:ament_index",  # urdf::Model finds its parser plugin through pluginlib
+        "@urdf_parser_plugin//:ament_index",
+    ],
+    # kdl_parser and what it uses as shared libraries (as in the plugin): urdf::Model loads its
+    # parser plugin by pluginlib, which needs the same urdf library as the one kdl_parser uses.
+    dynamic_deps = [
+        "@kdl_parser//:kdl_parser",
+        "@rosdistro//cc:console_bridge",
+        "@rosdistro//cc:orocos-kdl",
+        "@rosdistro//cc:tinyxml2",
+        "@urdf//:urdf",
+    ],
+    deps = [
+        ":tree_dynamics",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mujoco_library",
+        "@rules_cc//cc/runfiles",
+    ],
+)

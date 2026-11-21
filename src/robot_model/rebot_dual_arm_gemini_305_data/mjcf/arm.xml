@@ -1,0 +1,9 @@
+<mujoco model="arm">
+  <!-- One reBot arm with the Gemini 305 on its wrist, as a model to attach (scene.xml attaches it
+       twice): rs_arm.xml includes wrist_camera.xml, which attaches the camera model declared here.
+       No floor or light: the scene has them. -->
+  <asset>
+    <model name="gemini_305" file="gemini_305.xml"/>
+  </asset>
+  <include file="rs_arm.xml"/>
+</mujoco>

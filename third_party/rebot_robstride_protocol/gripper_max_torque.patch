@@ -1,0 +1,179 @@
+diff -ruN b3/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp b4/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp
+--- b3/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-16 21:38:27.995606011 -0500
++++ b4/rebot_robstride_protocol/include/rebot_robstride_protocol/rebot_gripper_protocol.hpp	2026-11-17 00:45:46.215144691 -0500
+@@ -19,8 +19,14 @@
+ // joint: position in m (0 closed, stroke open), velocity in m/s, and the
+ // effort state in N (the motor torque through the ideal, lossless
+ // transmission). The velocity command limits the speed in m/s then too.
+-// The underlying RobStride protocol remains responsible for MIT encoding,
+-// safe startup and feedback.
++// The squeeze is limited with the optional `max_torque` parameter (N*m at the motor;
++// with `stroke`, F = tau * stroke / (open_position - closed_position) in N): the MIT law
++// is tau = kp * (target - position) + ..., so a gripper blocked by an object while its
++// target keeps going to closed pushes with the motor's full torque (14 N*m, over
++// a kilonewton). When the motor has been stalled behind its target for a moment, the
++// command is held at max_torque / kp ahead of it instead, and the squeeze stays at max_torque.
++// Free motion (and the start of one) is not limited. The underlying RobStride protocol
++// remains responsible for MIT encoding, safe startup and feedback.
+ class RebotGripperProtocol final
+   : public shared_can_interface::v1::ProtocolInterface,
+     public shared_can_interface::v1::EnableReadinessInterface
+@@ -68,6 +74,11 @@
+     double stroke{0.0};
+     // The fastest velocity command, in the joint's unit per second.
+     double velocity_max{1.0};
++    // Squeeze limit (see max_torque below): the position error (motor rad) at which the MIT law's kp * error
++    // reaches it, infinity for no limit. Set by the `max_torque` device parameter (N*m at the motor).
++    double max_error{std::numeric_limits<double>::infinity()};
++    std::chrono::steady_clock::time_point pushing_since{};  // the target has been ahead of a stalled motor since
++    bool limited{false};                                    // pushing for long enough: the command is held at max_error
+     double target_position{std::numeric_limits<double>::quiet_NaN()};
+     double sent_position{std::numeric_limits<double>::quiet_NaN()};
+     double velocity_limit{0.25};
+diff -ruN b3/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp b4/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp
+--- b3/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-16 21:38:27.995606011 -0500
++++ b4/rebot_robstride_protocol/src/rebot_gripper_protocol.cpp	2026-11-17 00:45:46.215144691 -0500
+@@ -12,6 +12,10 @@
+ namespace
+ {
+ 
++// A motor that moves toward its target slower than this (rad/s), for this long, is stalled behind it.
++constexpr double kStallVelocity = 0.3;
++constexpr std::chrono::milliseconds kStallTime{80};
++
+ const std::string & required_parameter(
+   const shared_can_interface::v1::ParameterMap & parameters, const std::string & name)
+ {
+@@ -110,6 +114,14 @@
+       throw std::invalid_argument(configuration.name + " gripper endpoint exceeds motor limits");
+     }
+     device.velocity_limit = device.default_velocity / std::abs(unit_scale(device));
++    const double max_torque = optional_parameter(configuration.parameters, "max_torque", 0.0);
++    const double kp = std::stod(required_parameter(configuration.parameters, "mit_kp"));
++    if (!std::isfinite(max_torque) || max_torque < 0.0) {
++      throw std::invalid_argument(configuration.name + " max_torque must be finite and >= 0");
++    }
++    if (max_torque > 0.0 && kp > 0.0) {
++      device.max_error = max_torque / kp;
++    }
+     devices_.push_back(device);
+ 
+     auto motor_configuration = configuration;
+@@ -241,16 +253,45 @@
+     device.sent_position += std::clamp(error, -maximum_step, maximum_step);
+     device.sent_position = std::clamp(device.sent_position, 0.0, 1.0);
+     device.last_command_time = now;
+-    motor_protocol_.set_command(
+-      device.name, "position", to_motor(device, device.sent_position));
+     // The MIT law is tau = kp (q_des - q) + kd (dq_des - dq) + t_ff. With dq_des = 0 the kd term
+     // brakes the slewed motion (kd * speed, up to the motor's torque limit), capping the speed far
+     // below the slew limit; send the slew's own velocity so kd only damps the deviation from it.
+-    const double motor_velocity = elapsed > 1e-4 ?
+-      (to_motor(device, device.sent_position) - to_motor(device, previous_position)) / elapsed :
++    double motor_target = to_motor(device, device.sent_position);
++    double motor_velocity = elapsed > 1e-4 ?
++      (motor_target - to_motor(device, previous_position)) / elapsed :
+       0.0;
+-    motor_protocol_.set_command(
+-      device.name, "velocity", std::isfinite(motor_velocity) ? motor_velocity : 0.0);
++    if (!std::isfinite(motor_velocity)) {
++      motor_velocity = 0.0;
++    }
++    if (std::isfinite(device.max_error)) {
++      // Blocked: the target is beyond max_error and the motor isn't moving toward it. The grace period lets
++      // a motion start (breakaway friction can exceed the squeeze limit) and a contact settle.
++      double position = 0.0;
++      double velocity = 0.0;
++      if (motor_protocol_.get_state(device.name, "position", position) &&
++        motor_protocol_.get_state(device.name, "velocity", velocity))
++      {
++        const double error = motor_target - position;
++        const double toward = std::copysign(1.0, error) * velocity;
++        if (std::abs(error) > device.max_error && toward < kStallVelocity) {
++          if (device.pushing_since == std::chrono::steady_clock::time_point{}) {
++            device.pushing_since = now;
++          }
++          device.limited = device.limited || now - device.pushing_since >= kStallTime;
++        } else {
++          device.pushing_since = {};
++          device.limited = false;
++        }
++        if (device.limited) {
++          // Hold the command max_error ahead of the motor (not wound up further): the squeeze is max_torque.
++          motor_target = position + std::copysign(device.max_error, error);
++          motor_velocity = 0.0;
++          device.sent_position = std::clamp(to_normalized(device, motor_target), 0.0, 1.0);
++        }
++      }
++    }
++    motor_protocol_.set_command(device.name, "position", motor_target);
++    motor_protocol_.set_command(device.name, "velocity", motor_velocity);
+   }
+   motor_protocol_.command_frames(output);
+ }
+diff -ruN b3/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp b4/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp
+--- b3/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-16 21:38:41.599080486 -0500
++++ b4/rebot_robstride_protocol/test/test_rebot_gripper_protocol.cpp	2026-11-17 00:46:05.290798444 -0500
+@@ -225,3 +225,62 @@
+   // Closing at half the stroke per second = 2.5 rad/s of the 5 rad span, toward the closed position.
+   EXPECT_NEAR(command_velocity(commands.front()), -2.5, 0.1);
+ }
++
++namespace
++{
++shared_can_interface::v1::DeviceConfiguration limited_gripper_configuration()
++{
++  auto device = metric_gripper_configuration();
++  device.parameters["max_torque"] = "0.5";  // kp 50: the command is held 0.01 rad ahead of a blocked motor
++  return device;
++}
++}  // namespace
++
++TEST(RebotGripperProtocol, MaxTorqueHoldsTheCommandCloseToABlockedMotor)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {limited_gripper_configuration()});
++  ASSERT_TRUE(protocol.process_frame(status(2.5F, 0.0F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.1));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));  // close on something at 2.5 rad
++
++  std::vector<shared_can_interface::v1::CanFrame> commands;
++  for (int i = 0; i < 20; ++i) {  // 300 ms: the motor stays at 2.5 rad, stalled behind its target
++    protocol.command_frames(commands);
++    std::this_thread::sleep_for(std::chrono::milliseconds(15));
++    ASSERT_TRUE(protocol.process_frame(status(2.5F, 0.0F), std::chrono::steady_clock::now()));
++  }
++  protocol.command_frames(commands);
++  ASSERT_EQ(commands.size(), 1U);
++  // 0.5 N*m / kp 50 = 0.01 rad ahead of the motor, not at the closed end (0 rad), and no velocity push.
++  EXPECT_NEAR(command_position(commands.front()), 2.49, 0.003);
++  EXPECT_NEAR(command_velocity(commands.front()), 0.0, 0.1);
++}
++
++TEST(RebotGripperProtocol, MaxTorqueDoesNotLimitFreeMotion)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  protocol.configure({{"host_id", "0xFD"}}, {limited_gripper_configuration()});
++  ASSERT_TRUE(protocol.process_frame(status(5.0F, 0.0F), std::chrono::steady_clock::now()));
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "velocity", 0.025));  // 0.5 stroke/s = 2.5 rad/s
++  ASSERT_TRUE(protocol.set_command("gripper_command_joint", "position", 0.0));
++
++  std::vector<shared_can_interface::v1::CanFrame> commands;
++  double position = 5.0;
++  for (int i = 0; i < 20; ++i) {  // the motor follows the command, moving toward the target at the slew speed
++    protocol.command_frames(commands);
++    position = command_position(commands.front());
++    std::this_thread::sleep_for(std::chrono::milliseconds(15));
++    ASSERT_TRUE(protocol.process_frame(
++        status(static_cast<float>(position), -2.5F), std::chrono::steady_clock::now()));
++  }
++  EXPECT_LT(position, 4.5);  // ~0.75 rad of slewing; held at 0.01 rad ahead it would have moved 0.2 rad
++}
++
++TEST(RebotGripperProtocol, MaxTorqueMustBeNonNegative)
++{
++  rebot_robstride_protocol::RebotGripperProtocol protocol;
++  auto device = metric_gripper_configuration();
++  device.parameters["max_torque"] = "-1";
++  EXPECT_THROW(protocol.configure({{"host_id", "0xFD"}}, {device}), std::invalid_argument);
++}

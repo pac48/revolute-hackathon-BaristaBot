@@ -1,0 +1,96 @@
+Joint limits as box constraints in the IK (see UPSTREAM.md).
+
+InverseKinematics solves with LBFGSpp's L-BFGS-B (LBFGSBSolver) instead of
+L-BFGS, with per-joint bounds set by InverseKinematics::set_joint_limits /
+JointData::set_joint_limits (unbounded by default, as before). The start is
+projected onto the bounds. Also initializes niter, which was returned
+uninitialized when the solver threw.
+
+diff -ru a/include/fast_forward_kinematics/fast_inverse_kinematics.hpp b/include/fast_forward_kinematics/fast_inverse_kinematics.hpp
+--- a/include/fast_forward_kinematics/fast_inverse_kinematics.hpp
++++ b/include/fast_forward_kinematics/fast_inverse_kinematics.hpp
+@@ -3,11 +3,13 @@
+ #include <Eigen/Core>
+ #include <Eigen/Dense>
+ 
++#include <limits>
++#include <stdexcept>
+ #include "memory"
+ 
+ #ifdef FAST_FK_USE_IK
+ 
+-#include "LBFGS.h"
++#include "LBFGSB.h"
+ #include "kinematics_interface.hpp"
+ 
+ namespace fast_fk::internal
+@@ -18,8 +20,13 @@
+   Eigen::Matrix<float, 3, 3> target_rot_;
+   Eigen::Vector<float, 3> target_pose_;
+   std::array<std::array<float, 16>, FAST_FK_NUMBER_OF_JOINTS> joint_data = { 0 };
+-  std::unique_ptr<LBFGSpp::LBFGSSolver<float>> solver;
+-  LBFGSpp::LBFGSParam<float> param;
++  // Joint limits: box constraints of the solve (L-BFGS-B). Unbounded by default.
++  Eigen::VectorX<float> lower_bounds_ = Eigen::VectorX<float>::Constant(
++      FAST_FK_NUMBER_OF_JOINTS, -std::numeric_limits<float>::infinity());
++  Eigen::VectorX<float> upper_bounds_ = Eigen::VectorX<float>::Constant(
++      FAST_FK_NUMBER_OF_JOINTS, std::numeric_limits<float>::infinity());
++  std::unique_ptr<LBFGSpp::LBFGSBSolver<float>> solver;
++  LBFGSpp::LBFGSBParam<float> param;
+ 
+   InverseKinematics(const Eigen::Matrix<float, 3, 3>& target_rot,
+                     const Eigen::Vector<float, 3>& target_pose)
+@@ -29,7 +36,19 @@
+     param.epsilon_rel = 1E-3;
+     param.max_iterations = 30;
+ 
+-    solver = std::make_unique<LBFGSpp::LBFGSSolver<float>>(param);
++    solver = std::make_unique<LBFGSpp::LBFGSBSolver<float>>(param);
++  }
++
++  // Joint i stays within [lower[i], upper[i]] (use +-infinity for no limit).
++  void set_joint_limits(const Eigen::VectorX<float>& lower, const Eigen::VectorX<float>& upper)
++  {
++    if(lower.size() != FAST_FK_NUMBER_OF_JOINTS || upper.size() != FAST_FK_NUMBER_OF_JOINTS ||
++       (lower.array() > upper.array()).any())
++    {
++      throw std::invalid_argument("joint limits need FAST_FK_NUMBER_OF_JOINTS entries with lower <= upper");
++    }
++    lower_bounds_ = lower;
++    upper_bounds_ = upper;
+   }
+ 
+   fk_interface::IKSolverStats inverse_kinematics(Eigen::Matrix<float, 4, 4>& transform,
+@@ -41,11 +60,12 @@
+     target_pose_(2) = transform(2, 3);
+ 
+     float fx = 1E10;
+-    int niter;
++    int niter = 0;
+ 
+     try
+     {
+-      niter = solver->minimize(*this, q_guess, fx);
++      // Starts from q_guess projected onto the limits.
++      niter = solver->minimize(*this, q_guess, fx, lower_bounds_, upper_bounds_);
+     }
+     catch(const std::runtime_error& e)
+     {
+diff -ru a/include/fast_forward_kinematics/fast_kinematics.hpp b/include/fast_forward_kinematics/fast_kinematics.hpp
+--- a/include/fast_forward_kinematics/fast_kinematics.hpp
++++ b/include/fast_forward_kinematics/fast_kinematics.hpp
+@@ -121,6 +121,14 @@
+     return fun->inverse_kinematics(transform, q_guess);
+   }
+ 
++#ifdef FAST_FK_USE_IK
++  // Box constraints for inverse_kinematics (see InverseKinematics::set_joint_limits).
++  void set_joint_limits(const Eigen::VectorX<float>& lower, const Eigen::VectorX<float>& upper)
++  {
++    fun->set_joint_limits(lower, upper);
++  }
++#endif
++
+   Eigen::Matrix<float, 3, 3> target_rot;
+   Eigen::Vector<float, 3> target_pose;
+   std::array<std::array<float, 16>, FAST_FK_NUMBER_OF_JOINTS> joint_data = { 0 };

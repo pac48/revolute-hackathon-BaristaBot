@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# Run Bazel on another machine (the "remote build host") over ssh.
+#
+#   tools/remote use HOST        set the build host (an ssh host or alias); remembered per clone
+#   tools/remote status          show the host and whether it is ready
+#   tools/remote sync            send the current working tree to the host's mirror
+#   tools/remote bazel ARGS...   sync, then run `bazel ARGS...` on the host
+#   tools/remote shell           open a shell in the host's mirror
+#
+# Usually you don't call this directly: add `.remote` to a target and tools/bazel
+# builds that target on the host, in parallel with the local ones:
+#
+#   bazel build //app:planner.remote //app:viewer    # planner on the host, viewer here
+#   bazel test //tests:all.remote                    # tests run on the host
+#
+# Syncing sends the current state of every tracked file, including staged and
+# unstaged changes and newly staged files, as a snapshot commit on top of HEAD.
+# Untracked files are not sent (`git add` a new file to include it). The snapshot is built with a
+# temporary index, so your index, HEAD and branches are untouched. It is pushed
+# over ssh into a git mirror on the host, ~/.cache/remote-builds/<repo> (your
+# own checkouts there are untouched), and checked out. Each sync also points
+# the mirror at the same remote cache as this checkout, so results built on
+# either machine are cache hits on the other.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(basename "$ROOT")"
+MIRROR=".cache/remote-builds/$REPO" # relative to the host's $HOME
+
+die() { echo "error: $*" >&2; exit 1; }
+
+usage() { sed -n '2,23s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"; }
+
+remote_host() {
+  local h
+  h="$(git -C "$ROOT" config --local --get bazel.remoteHost 2>/dev/null || true)"
+  [[ -n "$h" ]] || die "no remote build host set; run: tools/remote use <ssh-host>"
+  echo "$h"
+}
+
+ssh_host() { ssh -T -o BatchMode=yes -o ConnectTimeout=5 "$@"; }
+
+# The address the host's ssh config resolves to, e.g. foo.local for an alias.
+host_address() { ssh -G "$1" 2>/dev/null | awk '/^hostname / { print $2; exit }'; }
+
+# The .bazelrc.cache the mirror should use: the same cache as this checkout,
+# addressed from the host's point of view.
+mirror_cache_rc() {
+  local host="$1" rc="$ROOT/.bazelrc.cache"
+  if [[ ! -f "$rc" ]]; then return; fi
+  local url hostport h
+  url="$(sed -n 's/^common --remote_cache=//p' "$rc")"
+  if [[ -z "$url" ]]; then cat "$rc"; return; fi
+  hostport="${url#*://}"
+  h="${hostport%:*}"
+  case "$h" in
+    localhost | 127.0.0.1) h="$(hostname)" ;;
+  esac
+  if [[ "${h,,}" == "$(host_address "$host" | tr '[:upper:]' '[:lower:]')" ]]; then
+    h=localhost
+  fi
+  sed "s|^common --remote_cache=.*|common --remote_cache=${url%%://*}://$h:${hostport##*:}|" "$rc"
+}
+
+cmd_use() {
+  local host="${1:-}"
+  [[ -n "$host" ]] || die "usage: tools/remote use <ssh-host>"
+  ssh_host "$host" true || die "cannot ssh to '$host' without a password (BatchMode)"
+  git -C "$ROOT" config --local bazel.remoteHost "$host"
+  cmd_status
+}
+
+cmd_status() {
+  local host
+  host="$(remote_host)"
+  echo "remote build host: $host ($(host_address "$host"))"
+  # shellcheck disable=SC2016
+  if ssh_host "$host" 'PATH=$HOME/.local/bin:$PATH; command -v bazel >/dev/null && echo "  bazel: $(command -v bazel)" || echo "  bazel: NOT FOUND (install bazelisk as ~/.local/bin/bazel)"; nproc | sed "s/^/  cpus: /"' 2>/dev/null; then
+    echo "  mirror: ~/$MIRROR"
+  else
+    echo "  NOT reachable over ssh"
+  fi
+}
+
+# Prints a commit whose tree is the working tree's tracked files: HEAD itself
+# when nothing changed, else a snapshot commit (parent HEAD) that no ref points
+# to locally. Uses a throwaway index so the real one is left alone.
+snapshot() {
+  local idx tree head
+  idx="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap "rm -f '$idx'" RETURN
+  head="$(git -C "$ROOT" rev-parse -q --verify HEAD || true)"
+  local real_idx
+  real_idx="$(git -C "$ROOT" rev-parse --path-format=absolute --git-path index)"
+  # Start from a copy of the real index so newly staged files are included.
+  if [[ -f "$real_idx" ]]; then
+    cp "$real_idx" "$idx"
+  else
+    GIT_INDEX_FILE="$idx" git -C "$ROOT" read-tree --empty
+  fi
+  # Staged or not, the working tree's version of each tracked file wins.
+  GIT_INDEX_FILE="$idx" git -C "$ROOT" add -u
+  tree="$(GIT_INDEX_FILE="$idx" git -C "$ROOT" write-tree)"
+  if [[ -n "$head" && "$tree" == "$(git -C "$ROOT" rev-parse "HEAD^{tree}")" ]]; then
+    echo "$head"
+  else
+    git -C "$ROOT" commit-tree "$tree" ${head:+-p "$head"} -m "tools/remote snapshot of the working tree"
+  fi
+}
+
+cmd_sync() {
+  local host sha
+  host="$(remote_host)"
+  sha="$(snapshot)"
+  ssh_host "$host" "git init -q ~/$MIRROR 2>/dev/null || true"
+  git -C "$ROOT" push -q --force "ssh://$host/~/$MIRROR" "$sha:refs/remote-build/head" 2>&1 |
+    grep -v '^$' >&2 || true
+  # Detached checkout of exactly that commit; `git clean` without -x keeps
+  # ignored files, so the mirror keeps its bazel-* symlinks and .bazelrc.cache.
+  ssh_host "$host" "cd ~/$MIRROR && git checkout -q --force --detach $sha && git clean -fdq"
+  local rc
+  rc="$(mirror_cache_rc "$host")"
+  if [[ -n "$rc" ]]; then
+    printf '%s\n' "$rc" | ssh_host "$host" "cat > ~/$MIRROR/.bazelrc.cache"
+  else
+    ssh_host "$host" "rm -f ~/$MIRROR/.bazelrc.cache"
+  fi
+  local what untracked
+  what="$(git -C "$ROOT" log -1 --format='%h %s' HEAD 2>/dev/null || echo 'no commits yet')"
+  [[ "$sha" == "$(git -C "$ROOT" rev-parse -q --verify HEAD)" ]] || what="$what + uncommitted changes"
+  echo "tools/remote: $host now has $what" >&2
+  untracked="$(git -C "$ROOT" ls-files --others --exclude-standard | wc -l)"
+  if [[ "$untracked" -gt 0 ]]; then
+    echo "tools/remote: $untracked untracked file(s) not sent; 'git add' them to include them" >&2
+  fi
+}
+
+cmd_bazel() {
+  local host
+  host="$(remote_host)"
+  [[ -n "${BAZEL_REMOTE_NO_SYNC:-}" ]] || cmd_sync
+  local tty=-T
+  [[ -t 0 && -t 1 ]] && tty=-t
+  # shellcheck disable=SC2029
+  exec ssh $tty -o BatchMode=yes "$host" "cd ~/$MIRROR && PATH=\$HOME/.local/bin:\$PATH exec bazel $(printf '%q ' "$@")"
+}
+
+cmd_shell() {
+  local host
+  host="$(remote_host)"
+  exec ssh -t "$host" "cd ~/$MIRROR && exec \$SHELL -l"
+}
+
+case "${1:-status}" in
+  use) shift; cmd_use "$@" ;;
+  status) cmd_status ;;
+  sync) cmd_sync ;;
+  bazel) shift; cmd_bazel "$@" ;;
+  shell) cmd_shell ;;
+  help | -h | --help) usage ;;
+  *) usage; exit 1 ;;
+esac

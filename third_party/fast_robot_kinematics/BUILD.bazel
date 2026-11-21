@@ -1,0 +1,6 @@
+# BUILD files for fast_robot_kinematics (https://github.com/pac48/fast_robot_kinematics)
+# (fixes to upstream: UPSTREAM.md)
+# and LBFGSpp (its IK solver). Robots are generated with fast_kinematics()
+# (//src/robot_model/robot_model_utils:fast_kinematics.bzl).
+
+exports_files(["joint_limit_box_constraints.patch"])

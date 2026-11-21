@@ -1,0 +1,10 @@
+# Collision spheres for VAMP, edited in Blender (import_spheres_obj).
+# Units: meters. Sphere centers ([x, y, z, radius]) are in each link's URDF frame.
+fixed_joints: {}
+spheres:
+  camera_bottom_screw:
+  camera_rear_screw_L:
+  camera_rear_screw_R:
+  camera_left_color_frame:
+  camera_right_color_frame:
+disable_collisions: []

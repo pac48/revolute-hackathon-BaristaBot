@@ -1,0 +1,9 @@
+<library path="mit_system_interface">
+  <class name="mit_system_interface/MitMujocoSystemInterface" type="mit_system_interface::MitMujocoSystemInterface" base_class_type="hardware_interface::SystemInterface">
+    <description>
+      mujoco_ros2_control/MujocoSystemInterface whose joints with a kp command interface take the RobStride
+      MIT-mode commands (position, velocity, kp, kd, t_ff) of the real arm, as in
+      rebot_robstride_protocol: effort = kp (position - q) + kd (velocity - qd) + t_ff.
+    </description>
+  </class>
+</library>

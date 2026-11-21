@@ -1,0 +1,47 @@
+# The active robot model: the model named in //:active_model.txt, the default of every app's --model.
+#   :active_model     Python: active_model.NAME, active_model.add_model_argument(parser, choices)
+#   :active_model_cc  C++: robot_model::kActiveModel (src/robot_model/active_model/active_model.hpp)
+# The name is compiled in, so editing active_model.txt rebuilds what depends on it.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The first line of active_model.txt that isn't blank or a # comment; fails the build unless it's a
+# package-like name.
+_NAME = """name=$$(sed -e 's/#.*//' -e 's/[[:space:]]//g' $(location //:active_model.txt) | grep -m1 .); \
+case "$$name" in ''|*[!a-z0-9_]*) echo "active_model.txt: expected a model name like rebot_arm, got '$$name'" >&2; exit 1 ;; esac; """
+
+genrule(
+    name = "active_model_name_py",
+    srcs = ["//:active_model.txt"],
+    outs = ["active_model_name.py"],
+    cmd = _NAME + """printf '# Generated from active_model.txt.\\nNAME = "%s"\\n' "$$name" > $@""",
+)
+
+genrule(
+    name = "active_model_hpp",
+    srcs = ["//:active_model.txt"],
+    outs = ["active_model.hpp"],
+    cmd = _NAME + """printf '// Generated from active_model.txt: the active robot model, the default of every app'"'"'s --model.\\n#pragma once\\n\\nnamespace robot_model\\n{\\ninline constexpr char kActiveModel[] = "%s";\\n}  // namespace robot_model\\n' "$$name" > $@""",
+)
+
+py_library(
+    name = "active_model",
+    srcs = [
+        "active_model.py",
+        ":active_model_name_py",
+    ],
+)
+
+cc_library(
+    name = "active_model_cc",
+    hdrs = [":active_model_hpp"],
+)
+
+py_test(
+    name = "active_model_test",
+    srcs = ["active_model_test.py"],
+    deps = [":active_model"],
+)

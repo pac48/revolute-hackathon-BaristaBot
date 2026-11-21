@@ -1,0 +1,29 @@
+# usb_cam parameters for the camera streaming tests. camera.py's flags
+# (--device, --width, ...) override individual values for one run.
+/**:
+  ros__parameters:
+    # Stable across replugging; camera.py resolves the symlink for usb_cam.
+    video_device: "/dev/v4l/by-id/usb-Elgato_Cam_Link_4K_A29YB61330NE4G-video-index0"
+    framerate: 30.0  # target; the camera's closest supported rate at or below it
+    io_method: "mmap"
+    # frame_id: the usb_camera model's optical frame (camera.py sets it)
+    pixel_format: "yuyv2rgb"  # camera YUYV converted to rgb8 on image_raw
+    av_device_format: "YUV422P"
+    # 0 = auto: the camera's native aspect ratio, largest size up to camera.py's
+    # --max-width (1280) that reaches framerate. Set one to pick a size in the
+    # native aspect ratio, or both to force a supported size.
+    image_width: 0
+    image_height: 0
+    camera_name: "test_camera"  # matches usb_cam's sample camera_info.yaml
+    camera_info_url: "package://usb_cam/config/camera_info.yaml"
+    brightness: -1
+    contrast: -1
+    saturation: -1
+    sharpness: -1
+    gain: -1
+    auto_white_balance: true
+    white_balance: 4000
+    autoexposure: true
+    exposure: 100
+    autofocus: false
+    focus: -1

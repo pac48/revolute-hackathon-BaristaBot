@@ -1,0 +1,22 @@
+Free MuJoCo's GL resources on the render thread when the viewer closes.
+ 
+The GLFW window and its GL context are created on the UI thread, but Simulate
+(and its GlfwAdapter) is destroyed later by ~MujocoSimulation on another thread.
+~GlfwAdapter calls mjr_freeContext there, with no GL context current, and the
+GL driver segfaults (seen in libGLdispatch on NVIDIA) on every shutdown with the
+viewer. Freeing the context right after RenderLoop() returns, while it is still
+current, leaves nothing for the later call to delete (mjr_freeContext only
+issues GL calls for non-zero handles and resets the context).
+ 
+--- a/src/mujoco_simulation.cpp
++++ b/src/mujoco_simulation.cpp
+@@ -625,6 +625,9 @@
+       // Blocks until terminated
+       RCLCPP_INFO(get_logger(), "Starting the MuJoCo rendering thread...");
+       sim_->RenderLoop();
++      // The GL context is current on this thread only; free MuJoCo's GL
++      // resources here rather than in ~GlfwAdapter on the destroying thread.
++      mjr_freeContext(&sim_->platform_ui->mjr_context());
+ 
+       if (detail::handle_render_loop_exit(sim_->exitrequest, explicit_shutdown_requested_,
+                                           node_->get_node_base_interface()->get_context()))

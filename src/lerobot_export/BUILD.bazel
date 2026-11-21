@@ -1,0 +1,91 @@
+# lerobot_export: converts data_recorder episodes (MCAP rosbags) to LeRobot datasets.
+#   bazel run //src/lerobot_export:bag_to_lerobot -- recordings/grasp --repo-id local/rebot_grasp_cube
+# :conventions is what a frame of those datasets is, shared with running a policy (//src/lerobot_policy).
+# Python deps are the @pip_lerobot hub (requirements.in -> requirements_lock.txt). The lock is uv's: regenerate it
+# with the command at its top (no compile_pip_requirements: pip-tools takes many minutes on PyTorch).
+
+load("@pip_lerobot//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# lerobot[dataset], with PyTorch for CUDA (:torch_cuda). A requirement's extras are not its target's deps, so the
+# extra's packages are listed.
+py_library(
+    name = "lerobot",
+    deps = [
+        ":torch_cuda",
+        requirement("lerobot"),
+        requirement("av"),
+        requirement("datasets"),
+        requirement("jsonlines"),
+        requirement("pandas"),
+        requirement("pyarrow"),
+        requirement("torchcodec"),
+    ],
+)
+
+# PyTorch with its CUDA libraries: torch requires cuda-toolkit[cublas,cudart,cufft,cufile,cupti,cusolver,cusparse,
+# nvjitlink,nvrtc,nvtx], whose packages (an extra's) are not torch's deps here. torch finds each library on sys.path
+# (nvidia/cu13/lib of any of them), where these put theirs. With a torch of another CUDA, update the list from
+# `importlib.metadata.requires("cuda-toolkit")`; //src/lerobot_policy:policy_runner_gpu_test checks it.
+py_library(
+    name = "torch_cuda",
+    deps = [
+        requirement("torch"),
+        requirement("nvidia-cublas"),
+        requirement("nvidia-cuda-cupti"),
+        requirement("nvidia-cuda-nvrtc"),
+        requirement("nvidia-cuda-runtime"),
+        requirement("nvidia-cufft"),
+        requirement("nvidia-cufile"),
+        requirement("nvidia-cusolver"),
+        requirement("nvidia-cusparse"),
+        requirement("nvidia-nvjitlink"),
+        requirement("nvidia-nvtx"),
+    ],
+)
+
+py_library(
+    name = "conventions",
+    srcs = ["conventions.py"],
+    deps = [
+        requirement("numpy"),
+        requirement("opencv-python-headless"),
+    ],
+)
+
+py_test(
+    name = "conventions_test",
+    size = "small",
+    srcs = ["conventions_test.py"],
+    deps = [
+        ":conventions",
+        requirement("numpy"),
+    ],
+)
+
+py_binary(
+    name = "bag_to_lerobot",
+    srcs = ["bag_to_lerobot.py"],
+    deps = [
+        ":conventions",
+        ":lerobot",
+        "//src/trajectory_generator:kinematics_client",
+        requirement("mcap"),
+        requirement("mcap-ros2-support"),
+        requirement("numpy"),
+        requirement("opencv-python-headless"),
+    ],
+)
+
+py_test(
+    name = "bag_to_lerobot_test",
+    size = "small",
+    srcs = ["bag_to_lerobot_test.py"],
+    deps = [
+        ":bag_to_lerobot",
+        requirement("numpy"),
+        requirement("opencv-python-headless"),
+    ],
+)

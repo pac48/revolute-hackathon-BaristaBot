@@ -1,0 +1,368 @@
+# trajectory_generator: point-to-point joint trajectories (quintic, minimum jerk)
+# for joint_trajectory_controller.
+#   :point_to_point  ROS-free math: plan(start, goal, duration | limits), sample()
+#   :client          rclpy: TrajectoryClient.move_to({joint: position}) via FollowJointTrajectory
+#   :move_to         CLI: bazel run //src/trajectory_generator:move_to -- joint1=0.5 joint2=-0.3
+#   :teleop_stream   bazel run //src/trajectory_generator:teleop_stream  (moves a running sim like teleop, until Ctrl-C)
+#   :waypoint_path   ROS-free timing of multi-waypoint paths (planner output)
+#   :planner_client  collision-free paths from a robot model's motion planner
+#   :plan_to         CLI: bazel run //src/trajectory_generator:plan_to -- --model rebot_arm joint1=0.5 [--box ...]
+#   :cartesian_path  ROS-free poses and straight-line tool paths with quintic timing
+#   :sampled_trajectory  ROS-free dense joint trajectories (IK along a Cartesian path)
+#   :kinematics_client   FK and dense IK from a robot model's kinematics
+#   :move_cartesian  CLI: bazel run //src/trajectory_generator:move_cartesian -- --by 0,0.1,0
+#   :cartesian_demo  bazel run //src/trajectory_generator:cartesian_demo  (square, sweep, reach on the reBot)
+#   :mpc_reach       bazel run //src/trajectory_generator:mpc_reach  (sampling MPC (DIAL-MPC) cycles the tool through poses, streaming to the controller)
+
+load("@pip_mpc//:requirements.bzl", mpc_requirement = "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "point_to_point",
+    srcs = ["point_to_point.py"],
+)
+
+py_library(
+    name = "waypoint_path",
+    srcs = ["waypoint_path.py"],
+    deps = [":point_to_point"],
+)
+
+# Motion planner CLIs of the robot models (JSON, see robot_model_utils/planner_cli.hpp).
+py_data_library(
+    name = "rebot_arm_planner",
+    src = "//src/robot_model/rebot_arm:plan",
+)
+
+py_data_library(
+    name = "rebot_arm_gemini_305_planner",
+    src = "//src/robot_model/rebot_arm_gemini_305:plan",
+)
+
+py_library(
+    name = "planner_client",
+    srcs = ["planner_client.py"],
+    deps = [
+        ":rebot_arm_gemini_305_planner",
+        ":rebot_arm_planner",
+    ],
+)
+
+py_library(
+    name = "cartesian_path",
+    srcs = ["cartesian_path.py"],
+    deps = [":point_to_point"],
+)
+
+py_library(
+    name = "sampled_trajectory",
+    srcs = ["sampled_trajectory.py"],
+    deps = [":point_to_point"],
+)
+
+# Kinematics CLIs of the robot models (JSON, see robot_model_utils/kinematics_cli.hpp).
+py_data_library(
+    name = "rebot_arm_kinematics",
+    src = "//src/robot_model/rebot_arm:kinematics",
+)
+
+py_data_library(
+    name = "rebot_arm_gemini_305_kinematics",
+    src = "//src/robot_model/rebot_arm_gemini_305:kinematics",
+)
+
+py_library(
+    name = "kinematics_client",
+    srcs = ["kinematics_client.py"],
+    deps = [
+        ":cartesian_path",
+        ":rebot_arm_gemini_305_kinematics",
+        ":rebot_arm_kinematics",
+    ],
+)
+
+py_library(
+    name = "msgs",
+    srcs = ["msgs.py"],
+    deps = [
+        ":point_to_point",
+        ":sampled_trajectory",
+        ":waypoint_path",
+        "@builtin_interfaces//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+py_library(
+    name = "client",
+    srcs = ["client.py"],
+    deps = [
+        ":cartesian_path",
+        ":kinematics_client",
+        ":msgs",
+        ":sampled_trajectory",
+        ":planner_client",
+        ":point_to_point",
+        ":waypoint_path",
+        "@control_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+    ],
+)
+
+py_library(
+    name = "cli_args",
+    srcs = ["cli_args.py"],
+)
+
+py_binary(
+    name = "move_to",
+    srcs = ["move_to.py"],
+    deps = [
+        ":cli_args",
+        ":client",
+        "@rclpy",
+    ],
+)
+
+# Moves a running sim like the teleop node: one-point trajectories at 200 Hz along a raised cosine,
+# until Ctrl-C (see the docstring).
+py_binary(
+    name = "teleop_stream",
+    srcs = ["teleop_stream.py"],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@control_msgs//:py",
+        "@rclpy",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+py_test(
+    name = "point_to_point_test",
+    size = "small",
+    srcs = ["point_to_point_test.py"],
+    deps = [":point_to_point"],
+)
+
+py_binary(
+    name = "plan_to",
+    srcs = ["plan_to.py"],
+    deps = [
+        ":cli_args",
+        ":client",
+        ":planner_client",
+        "//src/robot_model/active_model",
+        "@rclpy",
+    ],
+)
+
+py_test(
+    name = "waypoint_path_test",
+    size = "small",
+    srcs = ["waypoint_path_test.py"],
+    deps = [":waypoint_path"],
+)
+
+py_test(
+    name = "planner_client_test",
+    size = "small",
+    srcs = ["planner_client_test.py"],
+    deps = [":planner_client"],
+)
+
+py_binary(
+    name = "move_cartesian",
+    srcs = ["move_cartesian.py"],
+    deps = [
+        ":cli_args",
+        ":client",
+        ":kinematics_client",
+        "//src/robot_model/active_model",
+        "@rclpy",
+    ],
+)
+
+py_test(
+    name = "cartesian_path_test",
+    size = "small",
+    srcs = ["cartesian_path_test.py"],
+    deps = [":cartesian_path"],
+)
+
+py_test(
+    name = "sampled_trajectory_test",
+    size = "small",
+    srcs = ["sampled_trajectory_test.py"],
+    deps = [":sampled_trajectory"],
+)
+
+py_test(
+    name = "kinematics_client_test",
+    size = "small",
+    srcs = ["kinematics_client_test.py"],
+    deps = [
+        ":cartesian_path",
+        ":kinematics_client",
+    ],
+)
+
+# Demo: the reBot's tool draws a square, sweeps and reaches (Cartesian moves).
+py_binary(
+    name = "cartesian_demo",
+    srcs = ["cartesian_demo.py"],
+    deps = [
+        ":cartesian_path",
+        ":client",
+        ":kinematics_client",
+        "//src/robot_model/active_model",
+        "@rclpy",
+    ],
+)
+
+# Debugging: how the reBot follows a Cartesian move (reference vs feedback vs plan).
+py_binary(
+    name = "tracking_diagnostic",
+    srcs = ["tracking_diagnostic.py"],
+    deps = [
+        ":cartesian_demo",
+        ":cartesian_path",
+        ":client",
+        ":kinematics_client",
+        "//src/robot_model/active_model",
+        "@control_msgs//:py",
+        "@rclpy",
+    ],
+)
+
+# ---- Sampling MPC reaching (//src/sampling_mpc) ----------------------------------------------
+
+# ROS-free: waypoints, switching, the MPC for the model, plan -> trajectory points.
+py_library(
+    name = "mpc_reaching",
+    srcs = ["mpc_reaching.py"],
+    deps = [
+        mpc_requirement("mujoco"),
+        mpc_requirement("numpy"),
+        "//src/sampling_mpc:costs",
+        "//src/sampling_mpc:dial_mpc",
+        "//src/sampling_mpc:servo",
+    ],
+)
+
+py_test(
+    name = "mpc_reaching_test",
+    size = "small",
+    srcs = ["mpc_reaching_test.py"],
+    deps = [
+        ":mpc_reaching",
+        "//src/ros2_control_sim:controller_config",
+        "//src/ros2_control_sim:rebot_arm_controllers",
+        "//src/robot_model/rebot_arm_data:rs_mjcf",
+        "//src/robot_model/rebot_arm_gemini_305_data:mjcf",
+    ],
+)
+
+# The MPC on the GPU in closed loop (an NVIDIA GPU, outside any sandbox): not in //...
+py_test(
+    name = "mpc_reaching_gpu_test",
+    size = "large",
+    srcs = ["mpc_reaching_gpu_test.py"],
+    tags = [
+        "local",
+        "manual",
+        "requires-gpu",
+    ],
+    deps = [
+        ":mpc_reaching",
+        "//src/ros2_control_sim:controller_config",
+        "//src/ros2_control_sim:rebot_arm_controllers",
+        "//src/robot_model/rebot_arm_data:rs_mjcf",
+    ],
+)
+
+# The pick-and-place state machine (no ROS): grasp_cube's logic.
+py_library(
+    name = "grasp_state_machine",
+    srcs = ["grasp_state_machine.py"],
+    deps = [
+        ":cartesian_path",
+        mpc_requirement("numpy"),
+    ],
+)
+
+py_test(
+    name = "grasp_state_machine_test",
+    size = "small",
+    srcs = ["grasp_state_machine_test.py"],
+    deps = [":grasp_state_machine"],
+)
+
+# bazel run //src/trajectory_generator:grasp_cube -- [--laps 1] [--place X Y]: picks up the scene's cube and sets it down.
+py_binary(
+    name = "grasp_cube",
+    srcs = ["grasp_cube.py"],
+    deps = [
+        ":client",
+        ":grasp_state_machine",
+        ":kinematics_client",
+        ":planner_client",
+        mpc_requirement("mujoco"),
+        mpc_requirement("numpy"),
+        "//src/mujoco_state_msgs:py",
+        "//src/robot_model/active_model",
+        "//src/robot_model/rebot_arm_gemini_305_data:mjcf",
+        "@rclpy",
+        "@std_srvs//:py",
+    ],
+)
+
+# bazel run //src/trajectory_generator:mpc_reach -- [--model rebot_arm] [--rate 10]
+py_binary(
+    name = "mpc_reach",
+    srcs = ["mpc_reach.py"],
+    deps = [
+        ":mpc_reaching",
+        "//src/robot_model/active_model",
+        "//src/ros2_control_sim:controller_config",
+        "//src/ros2_control_sim:rebot_arm_controllers",
+        "//src/robot_model/rebot_arm_data:rs_mjcf",
+        "//src/robot_model/rebot_arm_gemini_305_data:mjcf",
+        "//src/mujoco_state_msgs:py",
+        "@builtin_interfaces//:py",
+        "@geometry_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+# Where does the arm's shake come from, the controller or the trajectories? (see the docstring)
+py_library(
+    name = "shake_diagnostic_lib",
+    srcs = ["shake_diagnostic.py"],
+    deps = [
+        mpc_requirement("numpy"),
+        "@builtin_interfaces//:py",
+        "@control_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+py_binary(
+    name = "shake_diagnostic",
+    srcs = ["shake_diagnostic.py"],
+    deps = [":shake_diagnostic_lib"],
+)
+
+py_test(
+    name = "shake_diagnostic_test",
+    size = "small",
+    srcs = ["shake_diagnostic_test.py"],
+    deps = [":shake_diagnostic_lib"],
+)

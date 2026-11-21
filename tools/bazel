@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Bazelisk runs this wrapper instead of Bazel when it exists (BAZEL_REAL is the real binary).
+#
+# 1. Remote targets: a target ending in `.remote` is built on the remote build
+#    host (see tools/remote) instead of here, in parallel with the local targets:
+#
+#      bazel build //app:planner.remote //app:viewer
+#      bazel test //tests:all.remote
+#      bazel run //tools:sim.remote -- --headless
+#
+#    A remote `run` gets this shell's ROS_DOMAIN_ID (0 if unset), so it talks to local nodes.
+#
+#    The host builds your current working tree: tracked files with any staged
+#    or unstaged changes (untracked files are not sent). With local targets too, the host's output goes to bazel-remote.log and a
+#    summary is printed at the end. Write flags as --flag=value so their values
+#    aren't mistaken for targets.
+#
+# 2. LAN cache fallback: Bazel fails the build when its remote cache is
+#    unreachable. When tools/cache has selected the LAN cache and it cannot be
+#    reached (e.g. away from home), use the RCR public cache for this command.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RC="$ROOT/.bazelrc.cache"
+REAL="${BAZEL_REAL:?tools/bazel must be run through bazelisk}"
+
+args=("$@")
+
+# Startup options come before the command; find the command's index.
+cmd_i=0
+while [[ $cmd_i -lt ${#args[@]} && "${args[$cmd_i]}" == -* ]]; do cmd_i=$((cmd_i + 1)); done
+command="${args[$cmd_i]:-}"
+
+# ---- Remote targets ---------------------------------------------------------
+
+is_target() {
+  [[ "$1" != -* ]] && [[ "$1" == //* || "$1" == @* || "$1" == :* || "$1" == *:* || "$1" == *... || "$1" == *.remote ]]
+}
+
+case "$command" in
+  build | test | run | coverage)
+    local_args=("${args[@]:0:$((cmd_i + 1))}")
+    remote_args=()
+    remote_targets=0
+    local_targets=0
+    after_dashdash=0
+    for a in "${args[@]:$((cmd_i + 1))}"; do
+      if [[ $after_dashdash -eq 1 && "$command" == run ]]; then
+        # Program arguments for `bazel run` go with the run, wherever it is.
+        local_args+=("$a"); remote_args+=("$a")
+      elif [[ "$a" == -- ]]; then
+        after_dashdash=1; local_args+=("$a"); remote_args+=("$a")
+      elif is_target "$a" && [[ "$a" == *.remote ]]; then
+        remote_targets=$((remote_targets + 1)); remote_args+=("${a%.remote}")
+      elif is_target "$a"; then
+        local_targets=$((local_targets + 1)); local_args+=("$a")
+      else
+        local_args+=("$a"); remote_args+=("$a")
+      fi
+    done
+
+    if [[ $remote_targets -gt 0 ]]; then
+      if [[ "$command" == run ]]; then
+        # A remote run joins this shell's ROS domain (ssh doesn't carry the environment), so
+        # local nodes (teleop, RViz, ...) see it. Unset here means 0, on both machines.
+        remote_args=("--run_env=ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}" "${remote_args[@]}")
+      fi
+      remote_cmd=("$command" "${remote_args[@]}")
+      quiet_cmd=("$command" --color=yes --curses=no "${remote_args[@]}")
+      if [[ $local_targets -eq 0 ]]; then
+        # Everything runs remotely: stream it straight to this terminal.
+        exec "$ROOT/tools/remote" bazel "${remote_cmd[@]}"
+      fi
+      [[ "$command" != run ]] || { echo "tools/bazel: 'run' takes one target; it can't be split between machines" >&2; exit 2; }
+
+      # Sync first so a failed push stops here, then build in parallel.
+      "$ROOT/tools/remote" sync
+      log="$ROOT/bazel-remote.log"
+      host="$(git -C "$ROOT" config --local --get bazel.remoteHost)"
+      echo "tools/bazel: building $remote_targets target(s) on $host in parallel; log: bazel-remote.log" >&2
+      BAZEL_REMOTE_NO_SYNC=1 "$ROOT/tools/remote" bazel "${quiet_cmd[@]}" >"$log" 2>&1 </dev/null &
+      remote_pid=$!
+      trap 'kill $remote_pid 2>/dev/null || true' INT TERM
+
+      set +e
+      BAZEL_REAL="$REAL" "$0" "${local_args[@]}"
+      local_rc=$?
+      if kill -0 $remote_pid 2>/dev/null; then
+        echo "tools/bazel: local build done; waiting for $host..." >&2
+      fi
+      wait $remote_pid
+      remote_rc=$?
+      set -e
+
+      echo "──── $host ($remote_targets target(s), full log: bazel-remote.log) ────" >&2
+      sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' "$log" |
+        grep -aE '^(INFO: (Elapsed|Build completed|Found)|ERROR:|FAILED:|//.* (PASSED|FAILED|NO STATUS|TIMEOUT|FLAKY)|Executed |Target .* up-to-date|  bazel-bin/)' >&2 ||
+        tail -n 20 "$log" >&2
+      if [[ $local_rc -ne 0 || $remote_rc -ne 0 ]]; then
+        echo "tools/bazel: local exit $local_rc, $host exit $remote_rc" >&2
+        exit $((local_rc != 0 ? local_rc : remote_rc))
+      fi
+      exit 0
+    fi
+    ;;
+esac
+
+# ---- LAN cache fallback -----------------------------------------------------
+
+if [[ -f "$RC" ]] && grep -q '^common --config=cache-lan' "$RC"; then
+  case "$command" in
+    build | test | run | coverage | cquery | aquery)
+      url="$(sed -n 's/^common --remote_cache=//p' "$RC")"
+      if ! curl -fsS --max-time 1 "$url/status" >/dev/null 2>&1; then
+        echo "tools/bazel: LAN cache $url unreachable; using the intrinsic cache for this command" >&2
+        args=("${args[@]:0:$((cmd_i + 1))}" --config=cache-intrinsic "${args[@]:$((cmd_i + 1))}")
+      fi
+      ;;
+  esac
+fi
+
+exec "$REAL" "${args[@]}"

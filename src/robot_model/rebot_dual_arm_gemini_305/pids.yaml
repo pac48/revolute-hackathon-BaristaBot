@@ -1,0 +1,11 @@
+# Position PIDs for the reBot's torque (<motor>) actuators: mujoco_ros2_control
+# needs them to accept position commands. Output is clamped to each motor's
+# MJCF ctrlrange. Parameters are read by its internal node.
+# (both arms: the gripper slides, left_joint7 and right_joint7, are the only joints with a position
+# command interface; the arm joints take the MIT-mode commands, see ../rebot_arm/description.py)
+mujoco_ros2_control_node:
+  ros__parameters:
+    pid_gains:
+      position:
+        left_joint7: {p: 2000.0, i: 0.0, d: 50.0, u_clamp_max: 500.0, u_clamp_min: -500.0}
+        right_joint7: {p: 2000.0, i: 0.0, d: 50.0, u_clamp_max: 500.0, u_clamp_min: -500.0}

@@ -1,0 +1,27 @@
+# ovrtx (NVIDIA Omniverse RTX sensor simulation) and ovstage, the @pip_ovrtx hub
+# (requirements.in -> requirements_lock.txt, regenerate with
+# `bazel run //third_party/ovrtx:requirements.update`). The PyPI ovrtx sdist is a
+# stub that fetches the real wheel from pypi.nvidia.com, hence the extra index.
+# Needs an NVIDIA RTX GPU and driver at runtime. Use as
+#   load("@pip_ovrtx//:requirements.bzl", "requirement")  ->  requirement("ovrtx")
+
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+
+compile_pip_requirements(
+    name = "requirements",
+    src = "requirements.in",
+    requirements_txt = "requirements_lock.txt",
+)
+
+load("@pip_ovrtx//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_test")
+
+# Import-only check that the hub resolves the NVIDIA wheels (no GPU needed).
+py_test(
+    name = "import_test",
+    srcs = ["import_test.py"],
+    deps = [
+        requirement("ovrtx"),
+        requirement("ovstage"),
+    ],
+)

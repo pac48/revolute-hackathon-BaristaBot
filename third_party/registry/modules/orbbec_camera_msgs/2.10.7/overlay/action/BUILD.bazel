@@ -1,0 +1,13 @@
+# Generated for orbbec_camera_msgs (see third_party/registry/README.md).
+load("@rosidl_default_generators//:defs.bzl", "ros_action")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "RunAeAwbLockTest.action",
+])
+
+ros_action(
+    name = "RunAeAwbLockTest",
+    src = "RunAeAwbLockTest.action",
+)
