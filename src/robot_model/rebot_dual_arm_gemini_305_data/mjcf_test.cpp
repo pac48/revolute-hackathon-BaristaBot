@@ -1,5 +1,5 @@
 // The dual-arm MJCF loads in MuJoCo (meshes resolved from runfiles) and has two identical arms,
-// prefixed left_ and right_, side by side: the same x and z, 34.5 cm apart in y.
+// prefixed left_ and right_, side by side: the same x and z, 61 cm apart in y.
 
 #include <gtest/gtest.h>
 #include <mujoco/mujoco.h>
@@ -61,12 +61,12 @@ TEST_F(DualArmMjcf, BasesAreAlignedInXAndSeparatedBy34_5CmInY)
   const double* right = data_->xpos + 3 * id(mjOBJ_BODY, "right_base_link");
   EXPECT_NEAR(left[0], right[0], 1e-9);
   EXPECT_NEAR(left[2], right[2], 1e-9);
-  EXPECT_NEAR(left[1] - right[1], 0.345, 1e-9);
-  // The same pose of the arms: the tools are 34.5 cm apart at the zero configuration, too.
+  EXPECT_NEAR(left[1] - right[1], 0.61, 1e-9);
+  // The same pose of the arms: the tools are 61 cm apart at the zero configuration, too.
   const double* left_tool = data_->xpos + 3 * id(mjOBJ_BODY, "left_gripper_end");
   const double* right_tool = data_->xpos + 3 * id(mjOBJ_BODY, "right_gripper_end");
   EXPECT_NEAR(left_tool[0], right_tool[0], 1e-6);
-  EXPECT_NEAR(left_tool[1] - right_tool[1], 0.345, 1e-6);
+  EXPECT_NEAR(left_tool[1] - right_tool[1], 0.61, 1e-6);
   EXPECT_NEAR(left_tool[2], right_tool[2], 1e-6);
 }
 

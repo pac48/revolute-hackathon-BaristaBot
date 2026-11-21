@@ -2,8 +2,8 @@
 // load_mujoco_model, make_kdl_kinematics, make_planner).
 //
 // The model files live in //src/robot_model/rebot_dual_arm_gemini_305_data: the single arm's model
-// (rebot_arm_gemini_305) attached twice, with the prefixes "left_" (base at y = +0.1725) and "right_"
-// (y = -0.1725). Each arm is the single arm: its chain (<prefix>base_link -> <prefix>gripper_end) is the
+// (rebot_arm_gemini_305) attached twice, with the prefixes "left_" (base at y = +0.305) and "right_"
+// (y = -0.305). Each arm is the single arm: its chain (<prefix>base_link -> <prefix>gripper_end) is the
 // single arm's with the prefix. The robot is one robot: one model, one planner over both arms.
 
 #pragma once

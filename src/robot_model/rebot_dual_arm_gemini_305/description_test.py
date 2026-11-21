@@ -1,4 +1,4 @@
-"""The dual-arm robot description: a valid URDF of two prefixed arms 34.5 cm apart, with their <ros2_control> blocks."""
+"""The dual-arm robot description: a valid URDF of two prefixed arms 61 cm apart, with their <ros2_control> blocks."""
 
 import os
 import unittest
@@ -42,7 +42,7 @@ class DescriptionTest(unittest.TestCase):
         left, right = origin["left_base_link"], origin["right_base_link"]
         self.assertAlmostEqual(left[0], right[0])
         self.assertAlmostEqual(left[2], right[2])
-        self.assertAlmostEqual(left[1] - right[1], 0.345)
+        self.assertAlmostEqual(left[1] - right[1], 0.61)
 
     def test_real_description_has_a_can_system_per_arm(self):
         urdf = ET.fromstring(description.real_robot_description("can3", "can4", gripper=True))
