@@ -155,7 +155,8 @@ bazel run //src/data_recorder:record -- -o recordings/grasp --episodic --use-sim
 It records every controller's state, the camera images (compressed) and `/joint_states`, `/tf`, `/tf_static` to MCAP
 rosbags without loss. With `--episodic`, nothing is recorded until something calls the recorder's `~/start` service
 (`std_srvs/Trigger`); `~/stop` keeps the episode as `DIR/episode_NNNN`, and a `~/start` during an episode discards it and
-starts over. For example:
+starts over. During teleop, **B on the right controller starts an episode and Y on the left controller stops it** (the
+teleop node calls `/data_recorder/start` and `/data_recorder/stop`; `--no-recorder-buttons` turns that off). By hand:
 
 ```bash
 bazel run //tools/ros2 -- service call /data_recorder/start std_srvs/srv/Trigger

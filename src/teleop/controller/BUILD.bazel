@@ -32,6 +32,7 @@ TELEOP_ROS_DEPS = {
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
     "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",  # the data recorder's start/stop (B / Y)
     "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
     "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
 }

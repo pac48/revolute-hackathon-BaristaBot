@@ -17,6 +17,12 @@
 // keep going from the same target. Press A (X on the left hand) to snap the target to the end
 // effector's pose. Squeeze the GRIP to close the gripper.
 //
+// Recording demonstrations (//src/data_recorder:record -- --episodic): press B on the right controller to start an
+// episode (the recorder's <--recorder>/start service) and Y on the left controller to end it (<--recorder>/stop),
+// whichever hands drive the arms. B during an episode discards it and starts over (the recorder's ~/start). The
+// recorder says "Start demonstration" / "End demonstration"; the reply is logged here. --no-recorder-buttons turns
+// this off.
+//
 // While engaged, every control cycle (--rate, default 200 Hz) the step toward the target is
 // speed-limited and solved with the model's IK in-process from --ik-seeds seeds: the robot's
 // measured joint angles (/joint_states), then random configurations within the joint limits.
@@ -72,6 +78,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 
@@ -115,6 +122,7 @@ using trajectory_msgs::msg::JointTrajectoryPoint;
 
 constexpr int kTrigger = 0, kGrip = 1;  // Joy axes from quest_bridge: [trigger, grip, stick_x, stick_y]
 constexpr int kReset = 0;               // Joy buttons: right [a, b, stick], left [x, y, stick, menu]
+constexpr int kUpper = 1;               // B on the right controller, Y on the left: the recorder's start / stop
 
 struct Options
 {
@@ -148,6 +156,7 @@ struct Options
   bool home_on_exit = true;
   bool swap_hands = false;  // several arms: each arm follows the other hand (the left controller drives the right arm)
   double home_velocity = 0.5;  // rad/s (m/s for slide joints): the speed of the trip home on exit
+  std::string recorder = "/data_recorder";  // the data recorder's node (its start/stop services); empty: no buttons
 };
 
 // The robot models with kinematics (add an entry per model). A robot with several arms is one robot: one
@@ -459,6 +468,7 @@ public:
       std::lock_guard lock(mutex_);
       inputs_.active = msg.data;
     });
+    if (!options.recorder.empty()) setup_recorder_buttons(options.recorder);
     joint_state_sub_ = create_subscription<JointState>("/joint_states", rclcpp::SensorDataQoS().keep_last(1),
                                                        [this](const JointState& msg) { on_joint_states(msg); });
     state_sub_ = create_subscription<JointTrajectoryControllerState>(
@@ -1120,6 +1130,59 @@ private:
   std::mutex mutex_;
   Inputs inputs_;
 
+  // Right B starts a recording episode, left Y stops it: the data recorder's Trigger services, on each press
+  // (rising edge). Its own subscriptions, independent of which hands drive the arms.
+  struct RecorderButton
+  {
+    std::string label;  // for the log: "B (right)"
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr client;
+    rclcpp::Subscription<Joy>::SharedPtr sub;
+    bool was_down = false;
+  };
+
+  void setup_recorder_buttons(const std::string& recorder)
+  {
+    const std::string base = recorder.back() == '/' ? recorder.substr(0, recorder.size() - 1) : recorder;
+    const std::pair<const char*, const char*> buttons[] = {{"right", "start"}, {"left", "stop"}};
+    for (std::size_t i = 0; i < 2; ++i)
+    {
+      const auto [hand, service] = buttons[i];
+      RecorderButton& b = recorder_buttons_[i];
+      b.label = std::string(i == 0 ? "B" : "Y") + " (" + hand + ")";
+      b.client = create_client<std_srvs::srv::Trigger>(base + "/" + service);
+      b.sub = create_subscription<Joy>("/quest/" + std::string(hand) + "/joy", rclcpp::SensorDataQoS().keep_last(1),
+                                       [this, i](const Joy& msg) { on_recorder_joy(i, msg); });
+    }
+    RCLCPP_INFO(get_logger(), "recording: right B calls %s/start, left Y calls %s/stop", base.c_str(), base.c_str());
+  }
+
+  void on_recorder_joy(std::size_t i, const Joy& msg)
+  {
+    RecorderButton& b = recorder_buttons_[i];
+    const bool down = msg.buttons.size() > static_cast<std::size_t>(kUpper) && msg.buttons[kUpper] != 0;
+    const bool pressed = down && !b.was_down;
+    b.was_down = down;
+    if (!pressed) return;
+    const std::string service = b.client->get_service_name();
+    if (!b.client->service_is_ready())
+    {
+      RCLCPP_WARN(get_logger(), "%s: %s is not available (run: bazel run //src/data_recorder:record -- --episodic)",
+                  b.label.c_str(), service.c_str());
+      return;
+    }
+    RCLCPP_INFO(get_logger(), "%s: calling %s", b.label.c_str(), service.c_str());
+    b.client->async_send_request(
+        std::make_shared<std_srvs::srv::Trigger::Request>(),
+        [this, label = b.label, service](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+          const auto& r = *future.get();
+          if (r.success)
+            RCLCPP_INFO(get_logger(), "%s: %s: %s", label.c_str(), service.c_str(), r.message.c_str());
+          else
+            RCLCPP_WARN(get_logger(), "%s: %s failed: %s", label.c_str(), service.c_str(), r.message.c_str());
+        });
+  }
+
+  std::array<RecorderButton, 2> recorder_buttons_;  // [0] right B: start, [1] left Y: stop
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr active_sub_;
   rclcpp::Subscription<JointTrajectoryControllerState>::SharedPtr state_sub_;
   rclcpp::Subscription<JointState>::SharedPtr joint_state_sub_;
@@ -1545,6 +1608,9 @@ int main(int argc, char** argv)
     ("gripper-closed", "gripper position at full squeeze", cxxopts::value(o.gripper_closed)->default_value("0"))
     ("no-home", "on Ctrl-C, exit at once instead of sending the arm home (all joints at zero)")
     ("home-velocity", "speed of the trip home on Ctrl-C, rad/s", cxxopts::value(o.home_velocity)->default_value("0.5"))
+    ("recorder", "data recorder node whose start/stop services right B / left Y call",
+     cxxopts::value(o.recorder)->default_value(o.recorder))
+    ("no-recorder-buttons", "B and Y don't start and stop the data recorder")
     ("rt-priority", "SCHED_FIFO priority of the control thread (0: normal scheduling)",
      cxxopts::value(o.rt_priority)->default_value("0"))
     ("h,help", "show this help");
@@ -1562,6 +1628,7 @@ int main(int argc, char** argv)
     o.collision_check = parsed.count("no-collision-check") == 0;
     o.home_on_exit = parsed.count("no-home") == 0;
     o.swap_hands = parsed.count("swap-hands") > 0;
+    if (parsed.count("no-recorder-buttons")) o.recorder.clear();
     if (parsed.count("no-gripper"))
     {
       o.gripper_joint.clear();
