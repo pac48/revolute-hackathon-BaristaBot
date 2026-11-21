@@ -1,6 +1,6 @@
 # Two reBot Arm B601-RS, each with an Orbbec Gemini 305 on its wrist: model data only, with no ROS
 # and no code. The single arm's is ../rebot_arm_gemini_305_data; this attaches that arm model twice
-# (MJCF <attach>, prefixes left_ and right_), the bases at y = +0.1725 and -0.1725 (34.5 cm apart,
+# (MJCF <attach>, prefixes left_ and right_), the bases at y = +0.31 and -0.31 (62 cm apart,
 # aligned in x), on one floor. Every body, joint, actuator and frame is prefixed, so the left arm's
 # joints are left_joint1 ... left_joint7 and its tool frame is left_gripper_end.
 # Each file is a py_data_library:

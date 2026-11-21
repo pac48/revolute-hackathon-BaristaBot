@@ -5,7 +5,7 @@
     description.real_robot_description("can0", "can1")  # the same URDF + the real arms' blocks
 
 The arms are the reBot's (rebot_arm.description) with every name prefixed: left_joint1 ...
-left_joint7, left_gripper_end, left_camera_link (bases at y = +0.1725), and right_* (y = -0.1725). Each
+left_joint7, left_gripper_end, left_camera_link (bases at y = +0.31), and right_* (y = -0.31). Each
 arm's joints have its interfaces: joint1-6 the MIT-mode commands and joint7 (the gripper) an
 effort or a position through a PID in the simulation.
 """

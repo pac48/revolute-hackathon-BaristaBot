@@ -1,6 +1,6 @@
 <mujoco model="rebot_dual_arm_gemini_305">
   <!-- Two reBot arms with a Gemini 305 each (arm.xml), side by side: the same orientation (x forward),
-       the same x, 34.5 cm apart in y (bases at y = +0.1725 "left" and -0.1725 "right"). Everything in
+       the same x, 62 cm apart in y (bases at y = +0.31 "left" and -0.31 "right"). Everything in
        an arm is prefixed: left_joint1, left_gripper_end, left_camera_link, ... Plus a light,
        MuJoCo's usual checker floor (a plane at z = 0 that the arms' bases stand on) and a scene camera. -->
   <asset>
@@ -13,10 +13,10 @@
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 .05" type="plane" material="grid"/>
-    <frame pos="0 0.1725 0">
+    <frame pos="0 0.31 0">
       <attach model="arm" body="base_link" prefix="left_"/>
     </frame>
-    <frame pos="0 -0.1725 0">
+    <frame pos="0 -0.31 0">
       <attach model="arm" body="base_link" prefix="right_"/>
     </frame>
     <!-- Scene camera (//src/camera_models/usb_camera, like the real setup's usb_cam): fixed in front of
