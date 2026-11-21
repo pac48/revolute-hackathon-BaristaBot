@@ -6,7 +6,7 @@
 // states (from a joint_states topic, say) as they are. Observation is where other kinds of
 // measurements will be added, for estimators that fuse them with the state in mjData.
 //
-// Like Kinematics and MotionPlanner, states are mjData of the model the estimator was made for.
+// Like Kinematics, states are mjData of the model the estimator was made for.
 
 #pragma once
 

@@ -55,7 +55,6 @@ cc_binary(
         "//src/robot_model/rebot_arm_gemini_305",
         "//src/robot_model/rebot_dual_arm_gemini_305",
         "//src/robot_model/robot_model_utils:kinematics",
-        "//src/robot_model/robot_model_utils:motion_planner",
         "//src/robot_model/robot_model_utils:mujoco_model",
         "@cxxopts",
     ],

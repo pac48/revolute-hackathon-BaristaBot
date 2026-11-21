@@ -1,9 +1,6 @@
 # robot_model_utils: shared code for the robot model packages.
 #   py_data_library.bzl  Python interface for data files and executables
 #   :mujoco_model        C++ runfiles lookup + MJCF loading used by each model library
-#   :motion_planner      C++ MotionPlanner interface (+ MuJoCo state helpers) for every model
-#   :vamp_planner        VampPlanner<Robot>: MotionPlanner for robots from vamp_robot
-#   :planner_cli         JSON stdin/stdout planning for any MotionPlanner
 #   :ros2_control        Python: add a mujoco_ros2_control <ros2_control> block to a URDF
 #   :kinematics          C++ Kinematics interface (FK/IK on mjData) for every model
 #   :kinematics_cli      JSON stdin/stdout FK and dense IK for any Kinematics
@@ -109,57 +106,6 @@ cc_library(
     deps = [
         ":mujoco_model",
         "@rosdistro//cc:mujoco_library",
-    ],
-)
-
-# Motion planning interface: each robot model's make_planner() returns one.
-cc_library(
-    name = "motion_planner",
-    srcs = ["motion_planner.cpp"],
-    hdrs = ["motion_planner.hpp"],
-    visibility = [
-        "//src/robot_model:__subpackages__",
-        "//src/teleop/controller:__pkg__",  # teleop: VAMP fallback
-    ],
-    deps = [
-        ":mujoco_model",
-        "@rosdistro//cc:mujoco_library",
-    ],
-)
-
-# JSON command-line front end for a MotionPlanner (each model provides a main).
-cc_library(
-    name = "planner_cli",
-    srcs = ["planner_cli.cpp"],
-    hdrs = ["planner_cli.hpp"],
-    visibility = ["//src/robot_model:__subpackages__"],
-    deps = [
-        ":motion_planner",
-        ":mujoco_model",
-        "@nlohmann_json//:json",
-    ],
-)
-
-# Header-only VAMP implementation; the file that instantiates it needs
-# VAMP_COPTS (//third_party/vamp:defs.bzl).
-cc_library(
-    name = "vamp_planner",
-    hdrs = ["vamp_planner.hpp"],
-    visibility = ["//src/robot_model:__subpackages__"],
-    deps = [
-        ":motion_planner",
-        "@vamp",
-    ],
-)
-
-cc_test(
-    name = "motion_planner_test",
-    size = "small",
-    srcs = ["motion_planner_test.cpp"],
-    deps = [
-        ":motion_planner",
-        "//src/robot_model/two_link_arm",
-        "@rosdistro//cc:googletest",
     ],
 )
 

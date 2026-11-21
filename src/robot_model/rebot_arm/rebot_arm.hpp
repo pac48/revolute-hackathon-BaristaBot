@@ -8,7 +8,6 @@
 #pragma once
 
 #include "src/robot_model/robot_model_utils/kinematics.hpp"
-#include "src/robot_model/robot_model_utils/motion_planner.hpp"
 #include "src/robot_model/robot_model_utils/mujoco_model.hpp"
 #include "src/robot_model/robot_model_utils/state_estimator.hpp"
 #include "src/robot_model/robot_model_utils/renderer.hpp"
@@ -28,12 +27,6 @@ std::string mjcf_path();
 // Compiles the MJCF (with its meshes) into a MuJoCo model.
 // Throws std::runtime_error with MuJoCo's message if loading fails.
 MjModelPtr load_mujoco_model();
-
-// Motion planner (VAMP) for the 6 arm joints joint1..joint6, with the gripper
-// held closed (collision model: //src/robot_model/rebot_arm_data:rs_spheres.yaml).
-// Takes mjData of `model` (from load_mujoco_model(); not owned, must outlive the
-// planner). Obstacles are in the arm's base frame (= MJCF world).
-std::unique_ptr<robot_model::MotionPlanner> make_planner(const mjModel* model);
 
 // Forward/inverse kinematics of the arm, base_link -> gripper_end (joint1..joint6;
 // fast_robot_kinematics, generated from the URDF of the RS MJCF). Poses are of

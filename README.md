@@ -10,7 +10,7 @@ What's here:
 | --- | --- | --- |
 | Real-arm driver (SocketCAN, RobStride motors) | `src/ros2_control_sim`, `src/rebot_robstride_protocol`, `third_party/rebot_robstride_protocol` | `//src/ros2_control_sim:real_arm` |
 | MuJoCo simulation | `src/ros2_control_sim` | `//src/ros2_control_sim:mujoco_arm_sim` |
-| Robot models (URDF/MJCF, kinematics, planners) | `src/robot_model`, `src/camera_models` | `//src/robot_model/<model>:view` |
+| Robot models (URDF/MJCF, kinematics) | `src/robot_model`, `src/camera_models` | `//src/robot_model/<model>:view` |
 | VR teleop (Meta Quest app, bridge, controller) | `src/teleop` | `src/teleop/run_teleop.sh`, `//src/teleop/controller:teleop` |
 | Demonstration recording (MCAP rosbags, voice cues) | `src/data_recorder` | `//src/data_recorder:record` |
 | LeRobot export and training | `src/lerobot_export`, `src/lerobot_policy` | `//src/lerobot_export:bag_to_lerobot`, `//src/lerobot_policy:train`, `:run_policy` |
@@ -224,7 +224,7 @@ The host builds your current working tree (tracked files, uncommitted changes in
 - `.bazelrc`: registries, hermetic toolchain, remote cache, Fast DDS and Android settings
 - `third_party/`: BUILD files and patches for the external archives; `third_party/registry` is a local registry with the Orbbec
   camera modules
-- `src/`: the packages in the table above, plus `trajectory_generator` (trajectory clients, kinematics, planning), `controllers`
+- `src/`: the packages in the table above, plus `trajectory_generator` (trajectory clients, kinematics), `controllers`
   (joint impedance controller), `mujoco_state_msgs`, `sampling_mpc`
 - `tools/`: `bazel` (bazelisk wrapper), `cache`, `remote`, `ros2`, `can`, `gdb`
 

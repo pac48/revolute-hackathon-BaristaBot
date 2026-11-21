@@ -2,9 +2,7 @@
 
 #include "src/robot_model/rebot_arm/rebot_arm_kinematics.hpp"
 #include "src/robot_model/robot_model_utils/kdl_kinematics.hpp"
-#include "src/robot_model/robot_model_utils/vamp_planner.hpp"
 
-#include <vamp/robots/rebot_arm.hh>
 
 #include <memory>
 #include <string>
@@ -20,11 +18,6 @@ std::string mjcf_path()
 MjModelPtr load_mujoco_model()
 {
   return robot_model::load_mujoco_model(mjcf_path());
-}
-
-std::unique_ptr<robot_model::MotionPlanner> make_planner(const mjModel* model)
-{
-  return std::make_unique<robot_model::VampPlanner<vamp::robots::RebotArm>>(model);
 }
 
 std::unique_ptr<robot_model::Kinematics> make_kinematics(const mjModel* model)

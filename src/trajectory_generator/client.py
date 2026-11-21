@@ -22,7 +22,6 @@ from sensor_msgs.msg import JointState
 from src.trajectory_generator import (
     cartesian_path,
     kinematics_client,
-    planner_client,
     point_to_point,
     sampled_trajectory,
     waypoint_path,
@@ -161,31 +160,6 @@ class TrajectoryClient:
             max_acceleration=max_acceleration,
         )
         return self.execute(joints, trajectory)
-
-    def plan_to(
-        self,
-        model: str,
-        goal: Mapping[str, float],
-        obstacles: Mapping | None = None,
-        max_velocity: float | Sequence[float] = 1.0,
-        max_acceleration: float | Sequence[float] | None = None,
-    ) -> tuple[planner_client.PlannedPath, FollowJointTrajectory.Result]:
-        """Plan a collision-free path for `model` from the current joint states to
-        `goal` among `obstacles` (planner_client.plan), execute it, and wait.
-
-        Planning joints not in `goal` keep their current positions. The path is timed
-        by waypoint_path.plan (stops at each waypoint, stays on the planned straight
-        segments). Only the planner's joints are commanded, so a controller with
-        other joints must allow partial joint goals.
-        """
-        joints = planner_client.joint_names(model)
-        unknown = set(goal) - set(joints)
-        if unknown:
-            raise TrajectoryError(f"{sorted(unknown)} are not planning joints of {model} ({joints})", "goal")
-        start = dict(zip(joints, self.current_positions(joints)))
-        path = planner_client.plan(model, start, {**start, **goal}, obstacles)
-        trajectory = waypoint_path.plan(path.waypoints, max_velocity=max_velocity, max_acceleration=max_acceleration)
-        return path, self.execute(path.joint_names, trajectory)
 
     def current_pose(self, model: str, commanded: bool = False) -> cartesian_path.Pose:
         """`model`'s tip pose (in its root frame) at the measured joint states, or at the

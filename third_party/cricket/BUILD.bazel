@@ -1,4 +1,0 @@
-# BUILD files for cricket (https://github.com/CoMMALab/cricket), the tracing
-# compiler that generates VAMP robot code, and its dependencies that aren't in
-# a registry (CppAD, CppADCodeGen, CGAL). The repos are http_archives in MODULE.bazel.
-exports_files(glob(["*.BUILD.bazel"]))

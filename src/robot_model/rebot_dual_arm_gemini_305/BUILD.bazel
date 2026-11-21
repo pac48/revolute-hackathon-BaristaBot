@@ -2,7 +2,6 @@
 # ros2_control description of the simulation and of the real robot, and the model viewer.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//third_party/vamp:defs.bzl", "VAMP_COPTS", "vamp_robot")
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
 load("//src/robot_model/robot_model_utils:fast_kinematics.bzl", "fast_kinematics")
 load("//src/robot_model/robot_model_utils:py_data_library.bzl", "py_data_library")
@@ -52,20 +51,6 @@ model_viewer(
     data = ["//src/robot_model/rebot_dual_arm_gemini_305_data:files"],
 )
 
-# ---- Motion planning (VAMP) ---------------------------------------------------
-
-# VAMP robot code (vamp::robots::RebotDualArmGemini305), generated at build time by cricket from the
-# model's spherized URDF: both arms' spheres, one 12-joint robot (rebot_dual_arm_gemini_305_data:vamp).
-vamp_robot(
-    name = "rebot_dual_arm_gemini_305_vamp",
-    end_effector = "left_gripper_end",
-    module = "rebot_dual_arm_gemini_305",
-    srdf = "//src/robot_model/rebot_dual_arm_gemini_305_data:vamp.srdf",
-    struct_name = "RebotDualArmGemini305",
-    urdf = "//src/robot_model/rebot_dual_arm_gemini_305_data:vamp.urdf",
-    visibility = ["//visibility:private"],
-)
-
 # ---- C++ -----------------------------------------------------------------------
 
 # Each arm's FK/IK (fast_robot_kinematics): <prefix>base_link -> <prefix>gripper_end, generated at build time
@@ -79,13 +64,11 @@ vamp_robot(
     visibility = ["//visibility:private"],
 ) for arm in ("left", "right")]
 
-# rebot_dual_arm_gemini_305::load_mujoco_model, make_kinematics / make_kdl_kinematics (per arm), make_planner (both arms).
+# rebot_dual_arm_gemini_305::load_mujoco_model, make_kinematics / make_kdl_kinematics (per arm).
 cc_library(
     name = "rebot_dual_arm_gemini_305",
     srcs = ["rebot_dual_arm_gemini_305.cpp"],
     hdrs = ["rebot_dual_arm_gemini_305.hpp"],
-    # The .cpp instantiates VampPlanner; the header is VAMP-free.
-    copts = VAMP_COPTS,
     data = [
         "//src/robot_model/rebot_dual_arm_gemini_305_data:files",  # meshes and the camera model, next to scene.xml
         "//src/robot_model/rebot_dual_arm_gemini_305_data:scene.xml",
@@ -95,14 +78,11 @@ cc_library(
         "REBOT_DUAL_ARM_GEMINI_305_MJCF=\\\"$(rlocationpath //src/robot_model/rebot_dual_arm_gemini_305_data:scene.xml)\\\"",
     ],
     deps = [
-        ":rebot_dual_arm_gemini_305_vamp",
         ":rebot_dual_arm_left_kinematics",
         ":rebot_dual_arm_right_kinematics",
         "//src/robot_model/robot_model_utils:kdl_kinematics",
         "//src/robot_model/robot_model_utils:kinematics",
-        "//src/robot_model/robot_model_utils:motion_planner",
         "//src/robot_model/robot_model_utils:mujoco_model",
-        "//src/robot_model/robot_model_utils:vamp_planner",
     ],
 )
 

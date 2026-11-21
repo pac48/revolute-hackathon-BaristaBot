@@ -2,7 +2,7 @@
 
 Starts the rebot_dual_arm_gemini_305 simulation headless and moves both arms to cartesian_demo's START,
 then runs //src/teleop/controller:teleop --model rebot_dual_arm_gemini_305 (one node, one trajectory
-controller, one planner over both arms) while this test plays the headset (/quest/active,
+controller over both arms) while this test plays the headset (/quest/active,
 /quest/{left,right}/pose in the world frame and /quest/{left,right}/joy, as //src/teleop/quest_bridge publishes
 them). Checks, on the tool pose each arm is being commanded to (TF teleop_command_<hand> in the world frame), that:
   - the left hand with its trigger held moves the left arm's tool by the hand's displacement and leaves the
@@ -216,18 +216,19 @@ class RebotDualArmTeleopTest(unittest.TestCase):
                 commanded = Commanded(node)
                 time.sleep(5.0)
                 start = {h: commanded.position(h) for h in HANDS}
-                gap = start["left"][1] - start["right"][1]  # the tools' spacing in y (the arms' 25 cm)
-                self.assertAlmostEqual(gap, 0.25, delta=0.01)
+                gap = start["left"][1] - start["right"][1]  # the tools' spacing in y (the arms' 62 cm)
+                self.assertAlmostEqual(gap, 0.62, delta=0.01)
 
-                # The left hand pushes the left tool 0.30 m toward -y: through the right arm's tool.
-                headset.play(3.0, {"left": (0.0, -0.30, 0.0)}, {"left": 1.0, "right": 0.0})
+                # Both hands push their tools 0.33 m toward each other: 62 cm apart, the targets cross in the middle.
+                headset.play(3.0, {"left": (0.0, -0.33, 0.0), "right": (0.0, 0.33, 0.0)}, {"left": 1.0, "right": 1.0})
                 time.sleep(1.0)
                 left, right = commanded.position("left"), commanded.position("right")
-                print(f"left tool y {left[1]:.3f} (target {start['left'][1] - 0.30:.3f}), right tool y {right[1]:.3f}", flush=True)
-                self.assertNear(right, start["right"], "the right arm stayed")
+                print(f"left tool y {left[1]:.3f} (target {start['left'][1] - 0.33:.3f}), "
+                      f"right tool y {right[1]:.3f} (target {start['right'][1] + 0.33:.3f})", flush=True)
                 self.assertLess(left[1], start["left"][1] - 0.02, "the left arm moved toward the right one")
-                # It stopped short of the other arm's tool (the tools are ~ a gripper wide), not through it.
-                self.assertGreater(left[1], right[1] + 0.03, "the left tool stopped before the right arm")
+                self.assertGreater(right[1], start["right"][1] + 0.02, "the right arm moved toward the left one")
+                # They stopped short of each other (the tools are ~ a gripper wide), not through each other.
+                self.assertGreater(left[1], right[1] + 0.03, "the tools stopped before meeting")
             finally:
                 if headset:
                     headset.close()
@@ -246,7 +247,7 @@ class RebotDualArmTeleopTest(unittest.TestCase):
                 teleop = teleop_node.popen("--model", MODEL)
                 headset = Headset()
                 commanded = Commanded(node)
-                time.sleep(5.0)  # the nodes (a model and a planner each) start and see the inputs
+                time.sleep(5.0)  # the nodes (a model each) start and see the inputs
                 start = {h: commanded.position(h) for h in HANDS}
 
                 # Only the left trigger: the left arm follows the left hand; the right arm stays.

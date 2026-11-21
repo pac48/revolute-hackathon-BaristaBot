@@ -312,19 +312,6 @@ py_test(
     ],
 )
 
-# End-to-end: the reBot follows a motion-planned path (VAMP) around a virtual obstacle.
-py_test(
-    name = "rebot_arm_plan_test",
-    size = "small",
-    srcs = ["rebot_arm_plan_test.py"],
-    tags = ["manual"],  # regression: tracking depends on the controller gains
-    deps = [
-        ":sim",
-        "//src/trajectory_generator:client",
-        "@rclpy",
-    ],
-)
-
 # End-to-end: the reBot's arm under joint impedance control follows a joint trajectory message.
 py_test(
     name = "rebot_arm_impedance_test",

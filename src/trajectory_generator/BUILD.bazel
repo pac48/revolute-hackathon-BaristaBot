@@ -4,9 +4,7 @@
 #   :client          rclpy: TrajectoryClient.move_to({joint: position}) via FollowJointTrajectory
 #   :move_to         CLI: bazel run //src/trajectory_generator:move_to -- joint1=0.5 joint2=-0.3
 #   :teleop_stream   bazel run //src/trajectory_generator:teleop_stream  (moves a running sim like teleop, until Ctrl-C)
-#   :waypoint_path   ROS-free timing of multi-waypoint paths (planner output)
-#   :planner_client  collision-free paths from a robot model's motion planner
-#   :plan_to         CLI: bazel run //src/trajectory_generator:plan_to -- --model rebot_arm joint1=0.5 [--box ...]
+#   :waypoint_path   ROS-free timing of multi-waypoint paths
 #   :cartesian_path  ROS-free poses and straight-line tool paths with quintic timing
 #   :sampled_trajectory  ROS-free dense joint trajectories (IK along a Cartesian path)
 #   :kinematics_client   FK and dense IK from a robot model's kinematics
@@ -29,26 +27,6 @@ py_library(
     name = "waypoint_path",
     srcs = ["waypoint_path.py"],
     deps = [":point_to_point"],
-)
-
-# Motion planner CLIs of the robot models (JSON, see robot_model_utils/planner_cli.hpp).
-py_data_library(
-    name = "rebot_arm_planner",
-    src = "//src/robot_model/rebot_arm:plan",
-)
-
-py_data_library(
-    name = "rebot_arm_gemini_305_planner",
-    src = "//src/robot_model/rebot_arm_gemini_305:plan",
-)
-
-py_library(
-    name = "planner_client",
-    srcs = ["planner_client.py"],
-    deps = [
-        ":rebot_arm_gemini_305_planner",
-        ":rebot_arm_planner",
-    ],
 )
 
 py_library(
@@ -104,7 +82,6 @@ py_library(
         ":kinematics_client",
         ":msgs",
         ":sampled_trajectory",
-        ":planner_client",
         ":point_to_point",
         ":waypoint_path",
         "@control_msgs//:py",
@@ -148,30 +125,11 @@ py_test(
     deps = [":point_to_point"],
 )
 
-py_binary(
-    name = "plan_to",
-    srcs = ["plan_to.py"],
-    deps = [
-        ":cli_args",
-        ":client",
-        ":planner_client",
-        "//src/robot_model/active_model",
-        "@rclpy",
-    ],
-)
-
 py_test(
     name = "waypoint_path_test",
     size = "small",
     srcs = ["waypoint_path_test.py"],
     deps = [":waypoint_path"],
-)
-
-py_test(
-    name = "planner_client_test",
-    size = "small",
-    srcs = ["planner_client_test.py"],
-    deps = [":planner_client"],
 )
 
 py_binary(
@@ -309,7 +267,6 @@ py_binary(
         ":client",
         ":grasp_state_machine",
         ":kinematics_client",
-        ":planner_client",
         mpc_requirement("mujoco"),
         mpc_requirement("numpy"),
         "//src/mujoco_state_msgs:py",

@@ -4,7 +4,7 @@
 //   bazel run //src/teleop/controller:teleop -- --model rebot_dual_arm_gemini_305   # both hands, both arms
 //
 // A robot with several arms (rebot_dual_arm_gemini_305) is one robot: one node, one joint state, one
-// trajectory controller (every joint in one trajectory), one planner over all the arms' joints and one collision
+// trajectory controller (every joint in one trajectory), one collision
 // model. The left hand drives the left arm and the right hand the right, each with its own trigger, grip and
 // reset button; each arm's commands and every plan avoid the other arm as well as themselves. Every robot has a
 // world frame ("world"): the controller poses, the targets and the TF frames below are in it, and each arm's IK
@@ -34,17 +34,15 @@
 // last sample before a self-collision: the whole segment if the line is clear, nothing (the
 // robot holds) if it collides at once. Collisions within the first --collision-escape (5 deg) of
 // joint motion along the line are tolerated when the line gets clear within it, so an arm at or
-// in a contact can always back out of it, but not push further in. If the line is blocked but the
-// goal itself is collision-free, the VAMP motion planner plans a path from the last command to
-// the goal, which is sent as a multi-point trajectory (each segment timed from the velocity
-// limits); new commands append to a plan still executing rather than cut across it. If the goal
-// collides or planning fails, the command stops before the collision as above.
+// in a contact can always back out of it, but not push further in. There is no motion planner: a
+// blocked line is not routed around; move the hand so the straight line clears the obstacle.
 //
-// On Ctrl-C (or SIGTERM) the robot goes home before the node exits: the VAMP planner plans a
-// collision-free path (all arms together) from the controller's setpoint to all joints at zero, played at
-// --home-velocity, so the arms are not left where they were (and don't drop when the driver is then
+// On Ctrl-C (or SIGTERM) the robot goes home before the node exits: a straight joint-space line (all arms
+// together) from the controller's setpoint to all joints at zero, checked for collisions in MuJoCo like the
+// commands (contacts already there at the start or at home are ignored), played at --home-velocity; if the line
+// collides the robot stays where it is. So the arms are not left where they were (and don't drop when the driver is then
 // stopped). Ctrl-C again, or --no-home, exits at once. The grippers are left as they are.
-// --no-collision-check skips all of this.
+// --no-collision-check skips all of this (and goes home unchecked).
 // If no seed converges, the robot holds. The clutch
 // releases when the controller isn't tracked, its pose is older than --stale, or /quest/active
 // is false.
@@ -64,7 +62,6 @@
 #include "src/robot_model/rebot_arm_gemini_305/rebot_arm_gemini_305.hpp"
 #include "src/robot_model/rebot_dual_arm_gemini_305/rebot_dual_arm_gemini_305.hpp"
 #include "src/robot_model/robot_model_utils/kinematics.hpp"
-#include "src/robot_model/robot_model_utils/motion_planner.hpp"
 #include "src/robot_model/robot_model_utils/mujoco_model.hpp"
 #include "src/teleop/controller/clutch.hpp"
 
@@ -139,7 +136,6 @@ struct Options
   double collision_resolution = 0.01;  // rad of the largest joint change between path samples
   double collision_escape = 5 * M_PI / 180;  // rad: collisions tolerated this close to the start if the path gets clear
   int collision_max_samples = 100;     // per cycle; long moves are sampled more coarsely
-  int plan_max_iterations = 20000;     // VAMP fallback for blocked paths
   int ik_seeds = 8;
   double ik_position_tolerance = 0.005;     // m
   double ik_orientation_tolerance = 0.05;  // rad
@@ -155,7 +151,7 @@ struct Options
 };
 
 // The robot models with kinematics (add an entry per model). A robot with several arms is one robot: one
-// model, one planner over all its arms' joints; each arm has its own chain.
+// model of all its arms; each arm has its own chain.
 struct Model
 {
   std::vector<std::string> arms;  // the arms' joint-name prefixes ({""}: one arm, the whole model)
@@ -163,7 +159,6 @@ struct Model
   // For one arm (`arm` is its prefix).
   std::function<std::unique_ptr<robot_model::Kinematics>(const mjModel*, const std::string& arm)> kinematics;  // fast_robot_kinematics
   std::function<std::unique_ptr<robot_model::Kinematics>(const mjModel*, const std::string& arm)> kdl_kinematics;  // KDL
-  std::unique_ptr<robot_model::MotionPlanner> (*planner)(const mjModel*);  // over all the arms' chain joints
 };
 
 template <typename Make>
@@ -177,22 +172,19 @@ const std::unordered_map<std::string, Model> kModels = {
      {{""},
       &rebot_arm::load_mujoco_model,
       single_arm(&rebot_arm::make_kinematics),
-      single_arm(&rebot_arm::make_kdl_kinematics),
-      &rebot_arm::make_planner}},
-    // The same arm with the Gemini 305 on its wrist (its planner's collision model includes the camera).
+      single_arm(&rebot_arm::make_kdl_kinematics)}},
+    // The same arm with the Gemini 305 on its wrist.
     {"rebot_arm_gemini_305",
      {{""},
       &rebot_arm_gemini_305::load_mujoco_model,
       single_arm(&rebot_arm_gemini_305::make_kinematics),
-      single_arm(&rebot_arm_gemini_305::make_kdl_kinematics),
-      &rebot_arm_gemini_305::make_planner}},
-    // Two of them, 25 cm apart in y (left_ and right_), as one robot: one planner over both arms.
+      single_arm(&rebot_arm_gemini_305::make_kdl_kinematics)}},
+    // Two of them, 62 cm apart in y (left_ and right_), as one robot.
     {"rebot_dual_arm_gemini_305",
      {rebot_dual_arm_gemini_305::arms(),
       &rebot_dual_arm_gemini_305::load_mujoco_model,
       &rebot_dual_arm_gemini_305::make_kinematics,
-      &rebot_dual_arm_gemini_305::make_kdl_kinematics,
-      &rebot_dual_arm_gemini_305::make_planner}},
+      &rebot_dual_arm_gemini_305::make_kdl_kinematics}},
 };
 
 Eigen::Isometry3d to_eigen(const geometry_msgs::msg::Pose& p)
@@ -234,9 +226,6 @@ struct RejectStats
   std::map<std::string, double> seeds_past_limit_max;
   // Accepted solutions: from seed 0 (measured angles) or a random seed; converged seeds.
   int solves = 0, won_measured = 0, won_random = 0;
-  int planned = 0, plan_failed = 0;  // blocked lines with a free goal: VAMP plans, and failures
-  double plan_ms_sum = 0, plan_ms_max = 0;
-  std::string plan_error;  // the last planning failure
   int truncated = 0;  // commands cut short before a collision
   int toward_goal = 0;  // steps out of reach, solved for the target itself instead
   int inexact = 0;    // commands outside the IK tolerances that still got closer to the target
@@ -263,12 +252,6 @@ struct RejectStats
     out << std::setprecision(1) << (solves ? double(converged) / solves : 0.0) << " of " << seeds_per_solve
         << " seeds converge per solve; accepted " << won_measured << " from the measured angles, " << won_random
         << " from random seeds";
-    if (planned + plan_failed > 0)
-    {
-      out << "; planned around " << planned << " blocked paths (mean " << std::setprecision(1)
-          << (planned ? plan_ms_sum / planned : 0.0) << " ms, max " << plan_ms_max << " ms)";
-      if (plan_failed > 0) out << ", " << plan_failed << " plans failed (" << plan_error << ")";
-    }
     if (truncated > 0)
     {
       out << "; " << truncated << " cut short before a collision [";
@@ -382,8 +365,8 @@ struct Arm
 constexpr const char* kWorld = "world";
 
 // Teleoperates a robot with one or several arms: each arm follows its own hand, and the robot is one: one
-// joint state, one trajectory controller, one planner over all the arms' joints, one collision model. So each
-// arm's commands, and the plans, avoid the other arms as well as themselves.
+// joint state, one trajectory controller, one collision model. So each arm's commands avoid the other arms
+// as well as themselves.
 class Teleop : public rclcpp::Node
 {
 public:
@@ -392,10 +375,7 @@ public:
       : Node("teleop"),
         options_(options),
         model_(std::move(model)),
-        state_(robot_model::make_data(model_.get())),
-        planner_(entry.planner(model_.get())),
-        plan_start_(robot_model::make_data(model_.get())),
-        plan_goal_(robot_model::make_data(model_.get()))
+        state_(robot_model::make_data(model_.get()))
   {
     const bool several = entry.arms.size() > 1;
     arms_.reserve(entry.arms.size());
@@ -501,8 +481,8 @@ public:
   }
 
   void run(const std::atomic<bool>& running);
-  // Plans a collision-free path for the whole robot from the controller's setpoint to all joints at zero
-  // and plays it at --home-velocity, waiting for it to end. `abort` ends the wait early. Returns whether it was sent.
+  // Moves the whole robot on a straight joint-space line from the controller's setpoint to all joints at zero
+  // (if it is collision-free, see line_clear) at --home-velocity, waiting for it to end. `abort` ends the wait early. Returns whether it was sent.
   bool go_home(const std::function<bool()>& abort);
 
 private:
@@ -704,78 +684,37 @@ private:
     return 1.0;
   }
 
-  // `goal` has no self-collision that `from` doesn't already have.
-  bool goal_collision_free(Arm& a, const std::vector<double>& from, const std::vector<double>& goal)
+  // Whether the straight joint-space line from `start` to `goal` (the robot's joints, joints_ order) is free of
+  // collisions, sampled every --collision-resolution of the largest joint change. Contacts already there at
+  // `start` or at `goal` (the arm rests in one at home: link2 - link5) are ignored. `pair` names the first other
+  // collision. state_ is restored.
+  bool line_clear(const std::vector<double>& start, const std::vector<double>& goal, std::string& pair)
   {
-    write_q(a, from);
-    const std::vector<std::string> already = arm_contacts(a);
-    write_q(a, goal);
-    for (const std::string& c : arm_contacts(a))
+    std::vector<double> saved(all_qpos_.size());
+    for (std::size_t i = 0; i < all_qpos_.size(); ++i) saved[i] = state_->qpos[all_qpos_[i]];
+    auto contacts_at = [&](double s) {
+      for (std::size_t i = 0; i < all_qpos_.size(); ++i) state_->qpos[all_qpos_[i]] = start[i] + s * (goal[i] - start[i]);
+      return robot_model::penetrating_contacts(model_.get(), state_.get());
+    };
+    std::vector<std::string> already = contacts_at(0.0);
+    for (const std::string& c : contacts_at(1.0)) already.push_back(c);
+    double span = 0;
+    for (std::size_t i = 0; i < start.size(); ++i) span = std::max(span, std::abs(goal[i] - start[i]));
+    const int samples = std::max(1, static_cast<int>(std::ceil(span / options_.collision_resolution)));
+    bool clear = true;
+    for (int k = 1; k <= samples && clear; ++k)
     {
-      if (std::find(already.begin(), already.end(), c) == already.end()) return false;
-    }
-    return true;
-  }
-
-  // Plans a path for the robot's joints from `start` to `goal` (both in joints_ order) with VAMP; the
-  // planner's joints are the robot's, so every arm is in its collision model. On success the waypoints (after
-  // the start, ending at goal) go into plan_points_ for send_trajectory().
-  bool plan_full(const std::vector<double>& start, const std::vector<double>& goal, RejectStats& stats)
-  {
-    if (!planner_) return false;
-    mju_copy(plan_start_->qpos, state_->qpos, model_->nq);
-    mju_copy(plan_goal_->qpos, state_->qpos, model_->nq);
-    for (std::size_t i = 0; i < all_qpos_.size(); ++i)
-    {
-      // A joint resting on its limit reads a little past it (a hard stop gives, the sim penetrates); the planner
-      // takes only states inside the limits.
-      const int id = mj_name2id(model_.get(), mjOBJ_JOINT, joints_[i].c_str());
-      const bool limited = id >= 0 && model_->jnt_limited[id];
-      const double lo = limited ? model_->jnt_range[2 * id] : -HUGE_VAL, hi = limited ? model_->jnt_range[2 * id + 1] : HUGE_VAL;
-      plan_start_->qpos[all_qpos_[i]] = std::clamp(start[i], lo, hi);
-      plan_goal_->qpos[all_qpos_[i]] = std::clamp(goal[i], lo, hi);
-    }
-    mj_kinematics(model_.get(), plan_start_.get());
-    mj_kinematics(model_.get(), plan_goal_.get());
-    robot_model::PlannerSettings settings;
-    settings.max_iterations = static_cast<std::size_t>(options_.plan_max_iterations);
-    const robot_model::PlanResult r = planner_->plan(*plan_start_, *plan_goal_, robot_model::Environment{}, settings);
-    const double ms = r.planning_time_ms + r.simplify_time_ms;
-    if (!r.solved || r.path.size() < 2)
-    {
-      ++stats.plan_failed;
-      stats.plan_error = r.error.empty() ? "no path" : r.error;
-      return false;
-    }
-    ++stats.planned;
-    stats.plan_ms_sum += ms;
-    stats.plan_ms_max = std::max(stats.plan_ms_max, ms);
-    plan_points_.clear();
-    for (std::size_t w = 1; w < r.path.size(); ++w)
-    {
-      std::vector<double> q(all_qpos_.size());
-      for (std::size_t i = 0; i < all_qpos_.size(); ++i) q[i] = r.path[w]->qpos[all_qpos_[i]];
-      plan_points_.push_back(std::move(q));
-    }
-    plan_points_.back() = goal;
-    new_plan_ = true;
-    return true;
-  }
-
-  // VAMP path from the arm's last command (a.q_prev_) to `goal` (its chain joints), the other arms staying
-  // where their last commands are: the whole robot plans, so the path avoids them (they may move aside).
-  bool plan_to(Arm& a, const std::vector<double>& goal, RejectStats& stats)
-  {
-    std::vector<double> start_all(joints_.size()), goal_all(joints_.size());
-    for (const Arm& b : arms_)
-    {
-      for (std::size_t i = 0; i < b.q_.size(); ++i)
+      for (const std::string& c : contacts_at(static_cast<double>(k) / samples))
       {
-        start_all[b.first + i] = &b == &a ? a.q_prev_[i] : b.q_[i];
-        goal_all[b.first + i] = &b == &a ? goal[i] : b.q_[i];
+        if (std::find(already.begin(), already.end(), c) != already.end()) continue;
+        pair = c;
+        clear = false;
+        break;
       }
     }
-    return plan_full(start_all, goal_all, stats);
+    for (std::size_t i = 0; i < all_qpos_.size(); ++i) state_->qpos[all_qpos_[i]] = saved[i];
+    mj_kinematics(model_.get(), state_.get());
+    return clear;
   }
 
   // IK for `target` from --ik-seeds seeds: `measured` (the robot's joint angles) first, then
@@ -1052,38 +991,6 @@ private:
     return std::hypot(p, r);
   }
 
-  // The line toward the (speed-limited) step is blocked by a collision. If the full target
-  // has a collision-free IK solution, plan to it with VAMP from the last command; on success
-  // a.q_ is that solution and plan_points_ the path. Returns why not otherwise ("" on success).
-  std::string plan_around(Arm& a, const Eigen::Isometry3d& target, const std::vector<double>& measured,
-                          RejectStats& stats)
-  {
-    if (!planner_) return "no planner for this model";
-    if (!plan_times_.empty() && plan_times_.back() > Clock::now())
-    {
-      return "waiting for the running plan to finish (" +
-             std::to_string(std::chrono::duration<double>(plan_times_.back() - Clock::now()).count()) + " s left)";
-    }
-    robot_model::IkResult best_failed;
-    RejectStats ignored;
-    ik_candidates(a, target, measured, ignored, best_failed);
-    std::string why = a.candidates_.empty() ? "no IK solution for the target" : "every target solution is in collision";
-    for (const Candidate& c : a.candidates_)
-    {
-      if (!c.converged || !goal_collision_free(a, a.q_prev_, c.q)) continue;  // plan only to the target itself
-      if (plan_to(a, c.q, stats))
-      {
-        a.q_ = c.q;
-        write_q(a, a.q_);
-        return "";
-      }
-      why = "VAMP found no path (" + stats.plan_error + ")";
-      break;
-    }
-    write_q(a, a.q_);  // the state is the solve's command again
-    return why;
-  }
-
   // Sends `points` (the robot's joint positions) as one trajectory starting now from `from` (the controller's
   // setpoint), each segment timed by point_time(); the first takes at least --lookahead. Plan
   // waypoints (the first `plan_count` points) get their scheduled end times in plan_times_.
@@ -1194,8 +1101,6 @@ private:
   Options options_;
   robot_model::MjModelPtr model_;
   robot_model::MjDataPtr state_;  // the robot at the last commanded solutions (each arm's), and the grippers' joints
-  std::unique_ptr<robot_model::MotionPlanner> planner_;  // over all the arms' chain joints
-  robot_model::MjDataPtr plan_start_, plan_goal_;
   std::vector<Arm> arms_;
   std::vector<std::string> joints_;                          // every arm's chain joints, arm after arm
   std::unordered_map<std::string, std::size_t> joint_index_;  // joint -> index in joints_
@@ -1361,27 +1266,12 @@ void Teleop::run(const std::atomic<bool>& running)
         ++solves;
         solve_us_sum += us;
         solve_us_max = std::max(solve_us_max, us);
-        bool planned = false;
         if (options_.collision_check && !a.blocked_pair_.empty())
         {
-          // Blocked on the way to the step: try planning to the whole target instead.
-          const std::string why = plan_around(a, goal, measured_fresh ? a.measured : a.q_, rejected);
-          planned = why.empty();
-          if (planned)
-          {
-            RCLCPP_INFO(get_logger(), "%s blocks the direct path; planned around it (%zu waypoints)",
-                        a.blocked_pair_.c_str(), plan_points_.size());
-            a.tool_ = goal;
-            arm_moved = true;
-            ++points;
-          }
-          else if (!why.empty())
-          {
-            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "stopped before collision %s; not planning: %s",
-                                 a.blocked_pair_.c_str(), why.c_str());
-          }
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "stopped before collision %s",
+                               a.blocked_pair_.c_str());
         }
-        if (solved && !planned)
+        if (solved)
         {
           // Cut short before a collision: the tool is where the command actually goes. If that
           // gets less close to the target than where the last command (or a running plan) ends,
@@ -1567,16 +1457,15 @@ bool Teleop::go_home(const std::function<bool()>& abort)
     return true;
   }
   const std::vector<double> home(n, 0.0);
-  RejectStats stats;
-  // The whole robot plans, so the arms don't meet on the way.
-  if (!plan_full(start, home, stats))
+  // The whole robot's line, so the arms don't meet on the way.
+  std::string pair;
+  if (options_.collision_check && !line_clear(start, home, pair))
   {
-    RCLCPP_ERROR(get_logger(), "going home: VAMP found no collision-free path (%s); not moving",
-                 stats.plan_error.empty() ? "planner unavailable" : stats.plan_error.c_str());
+    RCLCPP_ERROR(get_logger(), "going home: the straight line home collides (%s); not moving", pair.c_str());
     return false;
   }
   vmax_.assign(n, options_.home_velocity);
-  traj_points_ = plan_points_;
+  traj_points_ = {home};
   const double seconds = send_trajectory(start, traj_points_, 0, std::vector<std::optional<double>>(arms_.size()), now, nullptr);
   RCLCPP_INFO(get_logger(), "going home: %zu waypoints, %.1f s (Ctrl-C again to stop)", traj_points_.size(), seconds);
   const auto end = Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(seconds + 0.5));
@@ -1638,8 +1527,6 @@ int main(int argc, char** argv)
     ("collision-escape", "largest joint change at the start of a path within which a collision is tolerated "
      "if the path gets collision-free, rad",
      cxxopts::value(o.collision_escape)->default_value("0.0872665"))
-    ("plan-max-iterations", "VAMP iterations when the joint-space path to the goal is blocked",
-     cxxopts::value(o.plan_max_iterations)->default_value("20000"))
     ("collision-max-samples", "most path samples per cycle (long moves are sampled more coarsely)",
      cxxopts::value(o.collision_max_samples)->default_value("100"))
     ("ik-seeds", "IK seeds per cycle: the measured joint angles, then random ones; the closest valid solution wins",
@@ -1729,7 +1616,7 @@ int main(int argc, char** argv)
   }
 
   // One node for the robot: with several arms, each follows its own hand (left/right), and everything else (the
-  // joint states, the trajectory controller, the collision checks and the planner) is shared, so the arms avoid
+  // joint states, the trajectory controller, the collision checks) is shared, so the arms avoid
   // each other. The controller poses are in the world frame (quest_bridge, default frame world).
   std::shared_ptr<Teleop> node;
   try
